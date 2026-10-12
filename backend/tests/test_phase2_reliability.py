@@ -72,6 +72,40 @@ def test_failed_knowledge_does_not_prevent_high_risk_recording(client, employee_
     assert client.get("/api/v1/ready").status_code == 503
 
 
+@pytest.mark.parametrize("directory_state", ["missing", "empty"])
+def test_absent_knowledge_reports_unready_and_still_persists_incidents(
+    settings, tmp_path, directory_state
+):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    knowledge_path = tmp_path / "absent-knowledge"
+    if directory_state == "empty":
+        knowledge_path.mkdir()
+    cfg = settings.model_copy(update={"kb_dir": str(knowledge_path)})
+    with TestClient(create_app(cfg)) as client:
+        alive = client.get("/api/v1/health")
+        assert alive.status_code == 200 and alive.json()["status"] == "degraded"
+        assert client.get("/api/v1/ready").status_code == 503
+        assert client.app.state.knowledge.stats()["ready"] is False
+        login = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "employee@example.com",
+                "password": "Demo@12345",
+            },
+        )
+        login.raise_for_status()
+        headers = {"Authorization": "Bearer " + login.json()["access_token"]}
+        cid = new_conversation(client, headers)
+        payload = post(client, headers, cid, "I entered my password on a phishing page.")[
+            "assistant_message"
+        ]["payload"]
+        assert payload["human_escalation"] and payload["ticket_reference"]
+        assert not payload["grounded"] and not payload["source_documents"]
+
+
 def test_failed_ticket_has_durable_task_and_can_be_retried(
     client, employee_headers, security_headers, app, monkeypatch
 ):

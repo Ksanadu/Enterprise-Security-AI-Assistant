@@ -59,8 +59,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     knowledge = KnowledgeService(settings)
     try:
         stats = knowledge.startup()
-        logger.info(
-            "knowledge_ready documents=%d chunks=%d provider=%s store=%s",
+        logger.log(
+            logging.INFO if knowledge.is_ready() else logging.WARNING,
+            "knowledge_status ready=%s documents=%d chunks=%d provider=%s store=%s",
+            knowledge.is_ready(),
             stats.document_count,
             stats.chunk_count,
             stats.embedding_provider,

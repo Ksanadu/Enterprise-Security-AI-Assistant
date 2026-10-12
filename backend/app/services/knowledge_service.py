@@ -51,7 +51,8 @@ class KnowledgeService:
         return self._index
 
     def is_ready(self) -> bool:
-        return self._index.is_built
+        # A completed build with no documents/chunks cannot answer knowledge queries.
+        return self._index.is_built and bool(self._index.documents) and bool(self._index.chunks)
 
     def stats(self) -> dict[str, Any]:
         """Index health for `/health` and the dashboard. Contains no content."""
@@ -59,7 +60,7 @@ class KnowledgeService:
         return {
             **stats.to_dict(),
             "knowledge_base_dir": str(self._settings.knowledge_base_dir),
-            "ready": self._index.is_built,
+            "ready": self.is_ready(),
         }
 
     def documents_for(self, role: Role) -> list[dict[str, Any]]:
@@ -87,7 +88,7 @@ class KnowledgeService:
         top_k: int | None = None,
     ) -> RetrievalResult:
         """Authorisation-filtered retrieval."""
-        if not self._index.is_built:
+        if not self.is_ready():
             raise KnowledgeUnavailableError()
         return self._retriever.retrieve(redact_credentials(query), role=role, top_k=top_k)
 
