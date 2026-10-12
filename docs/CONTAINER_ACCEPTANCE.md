@@ -1,5 +1,7 @@
 # 容器验收执行说明
 
+最新最终 PR 源提交 `a7d4eee6855e2c4ceef7440f9e9dd98644c98f85` 的同套验收也已通过：[运行 38298909044](https://github.com/Ksanadu/enterprise-security-ai-assistant/actions/runs/38298909044)，job `114976707995`，制品 `11769446894`。PR #1 已合并；下面首次成功及失败记录作为过程证据保留。
+
 2026-10-13：GitHub Ubuntu runner 已实际通过 Mock + TF-IDF 容器核心验收，Docker Engine28.0.4。无 `.env` 与模拟 `.env` 两阶段均通过，记录：[成功运行](https://github.com/Ksanadu/enterprise-security-ai-assistant/actions/runs/38297173963)，对应源提交 `f7c4b1c49f6f9fb299e5f7ec62dad0441cde3219`。本机仍没有可用 Docker Engine，WSL 尚未初始化；容器浏览器和真实模型组合仍待执行。
 
 首次运行因Compose重复 `stop_grace_period` 失败；修复后发现空/缺失知识库误报就绪，故障验收再次失败。两项现已修复，分别加入重复键与空目录/缺失目录回归；不得把旧失败记录覆盖为通过。故障日志与JSON报告在工作流制品保存，清理仅限本次随机项目/卷。

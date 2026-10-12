@@ -1,5 +1,7 @@
 # PROJECT HANDOFF — Enterprise Security AI Assistant
 
+> 2026-10-13 最新补验：工程门禁和实际 Docker 核心流程已通过，PR #1 已合并。当前架构、证据、缺陷与清理记录见 [项目技术报告](docs/TECHNICAL_REPORT.md)。下方旧交接按历史版本阅读，Docker 浏览器/真实模式、独立质量与正式运维仍未完整签收。
+
 > 2026-10-12 实施补充：本文件下方的 Phase 10 完成、测试数字及 Docker 启动声明为原版本历史。当前正在执行新 Phase 0–8；Phase 7 和最终交付尚未结项。Docker 实际全链路、真实 LLM/Embedding 及新的独立质量验收尚未通过，不能从原版本记录推断已完成。当前依据为 [分阶段记录](docs/PHASE_PROGRESS.md)、[迁移运维](docs/OPS_MIGRATIONS.md)、[通知](docs/OPS_NOTIFICATIONS.md) 和 [监控](docs/OPS_MONITORING.md)。生产先备份/迁移，配置 HTTPS 通知接收端及正式账号，不能直接把原型库切成生产环境。
 
 **Historical handoff:** end of the original implementation Phase 10; this is not the current improvement sign-off.

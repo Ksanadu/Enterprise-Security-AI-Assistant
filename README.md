@@ -1,9 +1,11 @@
 # Enterprise Security AI Assistant
 
+> 2026-10-13 当前审查与技术状态见 [项目技术报告](docs/TECHNICAL_REPORT.md)：已合并主分支，GitHub 工程门禁及 Docker 核心验收通过；真实模型、独立质量、容器浏览器与正式运维尚未完整签收。
+
 > 2026-10-12：项目正在按 [分阶段完善方案](docs/IMPROVEMENT_PLAN.md) 推进。
 > 当前执行结果见 [实施记录](docs/PHASE_PROGRESS.md)；下文既有测试数字属于此前版本的历史基线。
 > 本机环境恢复可运行 `scripts/setup-local.ps1 -PythonExecutable <Python-3.12路径>`。
-> 运维入口：[迁移与共享预算](docs/OPS_MIGRATIONS.md)、[备份恢复](docs/OPS_BACKUP.md)、[通知与账号转换](docs/OPS_NOTIFICATIONS.md)、[状态巡检](docs/OPS_MONITORING.md)。Docker 和真实模型仍待实际验收，Phase 7 尚未结项。
+> 运维入口：[迁移与共享预算](docs/OPS_MIGRATIONS.md)、[备份恢复](docs/OPS_BACKUP.md)、[通知与账号转换](docs/OPS_NOTIFICATIONS.md)、[状态巡检](docs/OPS_MONITORING.md)。Docker 核心流程已补验；真实模型与正式运维仍待验收，Phase 7 尚未结项。
 > 当前 [验收矩阵](docs/ACCEPTANCE_MATRIX.md) 与 [试点部署手册](docs/OPS_PILOT_RUNBOOK.md) 可用于后续正式验收。
 > 2026-10-13 新增：[显式账号配置](docs/OPS_ACCOUNTS.md)、[业务保留与保全](docs/OPS_RETENTION.md)、[发布包与实际本地回滚](docs/OPS_RELEASE.md)。均使用隔离模拟库验证；正式政策、TLS/渠道和部署验收仍待完成。
 > 当前进入 [Phase 8 交接](docs/PHASE8_HANDOFF.md)，提供可校验的本地交付包和四类未完成门禁，完整方案尚未最终签收。
