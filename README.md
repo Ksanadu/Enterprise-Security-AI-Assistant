@@ -7,6 +7,7 @@
 > 当前 [验收矩阵](docs/ACCEPTANCE_MATRIX.md) 与 [试点部署手册](docs/OPS_PILOT_RUNBOOK.md) 可用于后续正式验收。
 > 2026-10-13 新增：[显式账号配置](docs/OPS_ACCOUNTS.md)、[业务保留与保全](docs/OPS_RETENTION.md)、[发布包与实际本地回滚](docs/OPS_RELEASE.md)。均使用隔离模拟库验证；正式政策、TLS/渠道和部署验收仍待完成。
 > 当前进入 [Phase 8 交接](docs/PHASE8_HANDOFF.md)，提供可校验的本地交付包和四类未完成门禁，完整方案尚未最终签收。
+> GitHub补验：Mock+TF-IDF实际Docker两配置核心流程已通过，见 [容器记录](docs/CONTAINER_ACCEPTANCE.md)；容器浏览器/真实模式、独立质量和正式部署仍待完成。此前本地ZIP是GitHub修复前的验收快照。
 
 A runnable prototype of an **enterprise security knowledge assistant**: employees ask
 security questions in natural language, the assistant answers **from an internal, role-scoped

@@ -132,3 +132,11 @@
 - 本地交接材料与校验能力已经交付，完整Phase8仍未最终结项。未对现有业务库或.env作修改，未提交/推送/发布；旧失败记录和两份KIMI原件保持。
 
 Phase 7–8 尚未完成；Docker 和真实模型的外部条件不足继续如实记录，不用离线结果替代对应验收。本地保留/保全与实际发布回滚能力已有证据，真实批准政策、正式告警/接收、生产前端 TLS及容器制品回滚仍需部署验收；六项质量标签冲突和新的独立审阅验收保持未完成。
+
+## GitHub 集成与容器补验（2026-10-13）
+
+- 分支 `codex/esaa-improvements`、[PR1](https://github.com/Ksanadu/enterprise-security-ai-assistant/pull/1) 同步全部项目源码，排除.env/运行库/备份/缓存/日志和两份KIMI原件。Git属性保护冻结v1原字节，暂存及新导出摘要均保持 `5c187684ac43ed5e5199bfa8e4ea61d1003355b2e0e42966d794f5d6c90097e2`，未更改标签/阈值。
+- 首次容器/工程CI揭示Compose重复键，第二次容器揭示空知识库误报就绪。修复后部署资产120通过、7本机条件跳过；知识/健康/可靠性80通过。第三次真实容器运行[通过](https://github.com/Ksanadu/enterprise-security-ai-assistant/actions/runs/38297173963)，Docker28.0.4，无.env/模拟.env各9项行为检查通过。
+- `f7c4b1c` GitHub工程运行后端1813通过、前端81通过，覆盖率94.89%，类型/运维静态/秘密检查通过，但后端Ruff因格式化移动了测试的noqa而失败。现直接调用SafeLoader子类API，格式化后全部静态检查与重复键回归通过；最终PR门禁须以最新提交的运行结论为准。
+- 先前Phase8本地ZIP及其清单保留为原验收快照，早于GitHub两项修复；不能当作最新GitHub源码/镜像。新构建/交付需在新路径生成并绑定新提交与对应证据。
+- [当前容器记录](CONTAINER_ACCEPTANCE.md) 已更新，PRODUCT_SPEC §9.10核心Compose启动具有实际证据。原始Phase8机器交付记录属于旧快照，四类最终门禁仍保守保持；Docker浏览器/真实组合、真实模型及答案审阅、新独立质量和正式部署未结项。

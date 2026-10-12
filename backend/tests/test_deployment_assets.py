@@ -73,17 +73,23 @@ UniqueKeyLoader.add_constructor(
 )
 
 
+def load_unique_yaml(raw):
+    loader = UniqueKeyLoader(raw)
+    try:
+        return loader.get_single_data()
+    finally:
+        loader.dispose()
+
+
 def test_compose_parser_rejects_duplicate_settings():
     with pytest.raises(ValueError, match="Duplicate YAML key: stop_grace_period"):
-        yaml.load(
-            "backend:\n  stop_grace_period: 90s\n  stop_grace_period: 15s\n", Loader=UniqueKeyLoader
-        )  # noqa: S506 -- SafeLoader subclass rejects duplicates
+        load_unique_yaml("backend:\n  stop_grace_period: 90s\n  stop_grace_period: 15s\n")
 
 
 @pytest.fixture(scope="module")
 def compose() -> dict[str, Any]:
     assert COMPOSE_FILE.is_file(), f"missing {COMPOSE_FILE}"
-    data = yaml.load(COMPOSE_FILE.read_text(encoding="utf-8"), Loader=UniqueKeyLoader)  # noqa: S506 -- SafeLoader subclass
+    data = load_unique_yaml(COMPOSE_FILE.read_text(encoding="utf-8"))
     assert isinstance(data, dict), "docker-compose.yml must be a YAML mapping"
     return data
 
