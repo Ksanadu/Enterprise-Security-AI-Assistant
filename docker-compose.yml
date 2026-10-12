@@ -40,7 +40,6 @@ name: esaa
 
 services:
   backend:
-    stop_grace_period: 90s
     build:
       context: ./backend
     image: esaa-backend:local
@@ -121,7 +120,7 @@ services:
 
     # uvicorn's own graceful shutdown closes the SQLite connection; cutting it
     # off mid-write is how a demo database gets left with a journal file.
-    stop_grace_period: 15s
+    stop_grace_period: 90s
 
     # A compromised process cannot gain privileges it did not already have.
     security_opt:

@@ -4,7 +4,7 @@
 > 不能替代 [当前实施与验收记录](docs/PHASE_PROGRESS.md)。
 > 新审查缺陷正在按 [分阶段方案](docs/IMPROVEMENT_PLAN.md) 修复。
 
-Current October collection: of 1810 collected (2026-10-13; collection only, not a pass result).
+Current October collection: of 1811 collected (2026-10-13; collection only, not a pass result).
 
 Latest October engineering gate: 1803 backend passed, 7 skipped, coverage 94.86%; 81 frontend passed; all gates exit 0 (`logs/phase0/phase8-engineering-gate.log`, 2026-10-13). Independent quality and external deployment acceptance remain separate and incomplete.
 
