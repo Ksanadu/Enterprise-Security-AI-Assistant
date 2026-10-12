@@ -4,6 +4,7 @@
 pytest>=8.3,<9
 pytest-asyncio>=0.24,<1
 pytest-cov>=6.0,<7
+cryptography>=50,<51                # temporary TLS certificates for local acceptance
 coverage>=7.6,<8
 
 # --- Static analysis ---

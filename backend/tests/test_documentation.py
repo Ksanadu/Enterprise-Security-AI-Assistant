@@ -206,7 +206,7 @@ class TestProjectStatusMatchesTheCode:
             pytest.skip(f"partial run ({collected} tests); the total is checked by the gate")
         assert f"of {collected} collected" in status, (
             f"PROJECT_STATUS says something else; the suite collected {collected} tests "
-            f"(that is {collected - 1} passed and 1 skipped)"
+            "(collection only; pass/fail totals are measured separately)"
         )
 
     def test_the_rule_counts_are_the_real_ones(self, status: str) -> None:

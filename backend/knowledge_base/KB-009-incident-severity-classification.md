@@ -15,6 +15,12 @@ summary: >-
 
 # Incident Severity Classification
 
+## 中文摘要：事件分级与人工升级
+
+勒索软件、确认的数据外泄或特权账号失陷属于 Critical；钓鱼页面提交凭据、批准意外 MFA 请求或恶意附件执行属于 High。只点击可疑链接且未提交信息属于 Medium；收到可疑邮件但未交互属于 Low。
+
+High 和 Critical 必须立即交由安全团队人工处理。事件等级依赖影响和证据，不能因为报告人觉得没事就降低风险；普通安全咨询和正常业务操作不应被当作已发生的安全事件。
+
 > **Simulated content.** Fictional sample documentation for a demonstration
 > system. Intended for IT support and the security team.
 

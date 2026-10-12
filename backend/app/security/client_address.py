@@ -108,7 +108,9 @@ def resolve_client_address(
 
     # Strict parsing applies to the header only: it is the one client-controlled
     # input here, so nothing that is not a bare IP literal is accepted from it.
-    hops = [parsed for parsed in (_as_ip_literal(part) for part in forwarded_for.split(",")) if parsed]
+    hops = [
+        parsed for parsed in (_as_ip_literal(part) for part in forwarded_for.split(",")) if parsed
+    ]
     if not hops:
         return peer
 

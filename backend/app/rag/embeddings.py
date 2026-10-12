@@ -36,6 +36,7 @@ import snowballstemmer
 
 from app.core.config import Settings, get_settings
 from app.core.errors import ConfigurationError, UpstreamServiceError
+from app.core.text_analysis import cjk_terms, lexical_aliases
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 #: folded into the index fingerprint so a cached vector index built by an older
 #: tokenizer is never reused: vectors from two different tokenizers are not
 #: comparable, and reusing them would silently degrade every answer.
-TOKENIZER_VERSION = "2"
+TOKENIZER_VERSION = "7"
 
 #: Common English words carry little signal and add noise. This is a static
 #: linguistic list - it is not derived from the knowledge base.
@@ -94,13 +95,15 @@ def tokenize(text: str) -> list[str]:
     matches.
     """
     tokens: list[str] = []
-    for raw in _TOKEN_RE.findall(text.lower().replace("-", "").replace("'", "")):
+    searchable = text + " " + lexical_aliases(text)
+    for raw in _TOKEN_RE.findall(searchable.lower().replace("-", "").replace("'", "")):
         if _NUMBER_RE.match(raw) or raw in STOPWORDS:
             continue
         token = _normalise_token(raw)
         if len(token) < 2 or token in STOPWORDS:
             continue
         tokens.append(token)
+    tokens.extend(cjk_terms(text))
     return tokens
 
 
@@ -346,8 +349,6 @@ class OpenAICompatibleEmbeddingProvider:
         if not texts:
             return []
 
-        import httpx
-
         payload = {"model": self._model, "input": list(texts)}
         headers = {
             "Authorization": f"Bearer {self._api_key}",
@@ -357,7 +358,9 @@ class OpenAICompatibleEmbeddingProvider:
         last_error: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:
-                response = httpx.post(
+                from app.ai.model_budget import provider_post
+
+                response = provider_post(
                     f"{self._base_url}/embeddings",
                     json=payload,
                     headers=headers,
@@ -365,12 +368,31 @@ class OpenAICompatibleEmbeddingProvider:
                 )
                 response.raise_for_status()
                 body = response.json()
-                vectors = [item["embedding"] for item in body["data"]]
+                rows = body["data"]
+                if any("index" in item for item in rows):
+                    indexes = [item.get("index") for item in rows]
+                    if any(
+                        not isinstance(index, int) or isinstance(index, bool) for index in indexes
+                    ) or set(indexes) != set(range(len(texts))):
+                        raise UpstreamServiceError(
+                            "Embedding provider returned invalid input indexes."
+                        )
+                    rows = sorted(rows, key=lambda item: item["index"])
+                vectors = [[float(value) for value in item["embedding"]] for item in rows]
                 if len(vectors) != len(texts):
                     raise UpstreamServiceError(
                         "Embedding provider returned an unexpected number of vectors."
                     )
-                return [_l2_normalise([float(value) for value in vector]) for vector in vectors]
+                if any(
+                    len(vector) != self._dimension
+                    or not all(math.isfinite(value) for value in vector)
+                    or not any(value != 0 for value in vector)
+                    for vector in vectors
+                ):
+                    raise UpstreamServiceError(
+                        "Embedding provider returned invalid vector dimensions or values."
+                    )
+                return [_l2_normalise(vector) for vector in vectors]
             except UpstreamServiceError:
                 raise
             except Exception as exc:
@@ -389,10 +411,20 @@ class OpenAICompatibleEmbeddingProvider:
 
     def state(self) -> dict[str, Any]:
         # No fitted state; the model name identifies the vectors.
-        return {"name": self.name, "model": self._model, "dimension": self._dimension}
+        return {
+            "name": self.name,
+            "model": self._model,
+            "dimension": self._dimension,
+            "base_url": self._base_url,
+        }
 
     def load_state(self, state: dict[str, Any]) -> bool:
-        return state.get("name") == self.name and int(state.get("dimension", 0)) == self._dimension
+        return (
+            state.get("name") == self.name
+            and state.get("model") == self._model
+            and state.get("base_url") == self._base_url
+            and state.get("dimension") == self._dimension
+        )
 
 
 def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvider:

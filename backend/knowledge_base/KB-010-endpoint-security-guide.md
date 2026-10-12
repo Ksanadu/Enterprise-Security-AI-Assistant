@@ -17,6 +17,12 @@ summary: >-
 
 # Endpoint Security Guide (Employee Guide)
 
+## 中文摘要：电脑异常与可疑附件
+
+打开邮件附件之后电脑出现异常弹窗、笔记本不断弹出奇怪窗口、出现未安装的程序或终端保护关闭时，应怀疑恶意软件事件并立即报告。不要拨打弹窗中的电话号码。
+
+怀疑感染时先断开网络，停止使用设备，保留现场并联系 IT 服务台和安全团队。不要自行清理、重启或插入 USB 复制文件；需要改密码时使用另一台可信设备。
+
 > **Simulated content.** Fictional sample documentation for a demonstration
 > system.
 

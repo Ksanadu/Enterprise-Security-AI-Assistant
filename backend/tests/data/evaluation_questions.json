@@ -642,18 +642,18 @@
     },
     {
       "id": "language-001",
-      "scenario": "limitation",
+      "scenario": "language_acceptance",
       "role": "employee",
       "question": "公司密码有什么要求？",
       "expected": {
-        "intent": "out_of_scope",
+        "intent": "security_faq",
         "risk_level": "low",
         "escalation": false,
         "ticket": false,
         "blocked": false,
         "documents_any_of": []
       },
-      "notes": "Known limitation, asserted deliberately: the knowledge base, tokenizer and rules are English-only. A Chinese question must fail safely - no crash, no hallucinated answer - rather than being silently mishandled."
+      "notes": "Chinese language acceptance: the original specification question is now supported; authorized source assertions are also covered by test_phase1_safety.py."
     }
   ]
 }

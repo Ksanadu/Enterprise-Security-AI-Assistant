@@ -16,6 +16,7 @@ dist/
 *.egg-info/
 .eggs/
 .venv/
+.venv-backup-*/
 venv/
 env/
 .pytest_cache/
@@ -69,3 +70,7 @@ desktop.ini
 
 # ---- Unrelated pre-existing local files (not part of this project) ----
 old/
+
+# Operator-approved policies contain private ownership/governance metadata.
+retention-policy.json
+retention-policy.approved.json

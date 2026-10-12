@@ -78,6 +78,7 @@ class Settings(BaseSettings):
 
     # -- Database ---------------------------------------------------------
     database_url: str = "sqlite:///./data/app.db"
+    shared_security_limits: bool = True
 
     # -- Auth -------------------------------------------------------------
     auth_secret_key: str = INSECURE_DEV_SECRET
@@ -93,6 +94,7 @@ class Settings(BaseSettings):
     #: Window over which failures are counted, and the lockout duration.
     auth_login_window_seconds: int = 900
     auth_lockout_seconds: int = 900
+    auth_attempt_lease_seconds: int = Field(default=30, ge=5, le=120)
     #: How long revoked/expired session rows are kept as evidence.
     auth_session_retention_days: int = 30
     #: True when a random per-process signing key was generated (non-production
@@ -111,6 +113,24 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     llm_temperature: float = 0.0
     llm_timeout_seconds: int = 45
+    chat_model_deadline_seconds: int = Field(default=90, ge=1, le=100)
+    chat_max_model_api_calls: int = Field(default=10, ge=1, le=30)
+    chat_max_output_tokens: int = Field(default=5000, ge=256, le=20000)
+    workflow_retry_interval_seconds: int = Field(default=30, ge=0, le=3600)
+    maintenance_interval_seconds: int = Field(default=300, ge=0, le=3600)
+    retention_policy_file: str = ""
+    retention_backup_dir: str = ""
+    notification_webhook_url: str = ""
+    notification_lead_webhook_url: str = ""
+    notification_signing_secret: str = ""
+    notification_ca_bundle_file: str = ""
+    notification_poll_interval_seconds: int = Field(default=30, ge=0, le=3600)
+    notification_timeout_seconds: int = Field(default=5, ge=1, le=15)
+    notification_max_attempts: int = Field(default=10, ge=1, le=100)
+    notification_retry_base_seconds: int = Field(default=5, ge=1, le=300)
+    notification_high_ack_seconds: int = Field(default=1800, ge=1, le=86400)
+    notification_critical_ack_seconds: int = Field(default=900, ge=1, le=86400)
+    notification_reminder_interval_seconds: int = Field(default=900, ge=1, le=86400)
     llm_max_retries: int = 2
 
     # -- Embeddings -------------------------------------------------------
@@ -243,6 +263,12 @@ class Settings(BaseSettings):
             raise ValueError("AUTH_MAX_LOGIN_ATTEMPTS_PER_IP must be >= AUTH_MAX_LOGIN_ATTEMPTS")
         if self.auth_lockout_seconds < 1:
             raise ValueError("AUTH_LOCKOUT_SECONDS must be >= 1")
+        if self.is_production and not self.shared_security_limits:
+            raise ValueError("Production requires SHARED_SECURITY_LIMITS=true")
+        if self.is_production and self.maintenance_interval_seconds == 0:
+            raise ValueError("Production requires scheduled maintenance")
+        if self.is_production and self.workflow_retry_interval_seconds == 0:
+            raise ValueError("Production requires workflow recovery")
         if self.rag_chunk_max_chars < 100:
             raise ValueError("RAG_CHUNK_MAX_CHARS must be >= 100")
         if not 0 <= self.rag_chunk_overlap_chars < self.rag_chunk_max_chars:
@@ -325,7 +351,14 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return the process-wide settings singleton."""
-    return Settings()
+    try:
+        return Settings()
+    except Exception:
+        from app.core.errors import ConfigurationError
+
+        raise ConfigurationError(
+            "Configuration is invalid; inspect environment privately."
+        ) from None
 
 
 def generate_secret_key() -> str:

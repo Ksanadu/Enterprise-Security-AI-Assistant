@@ -14,6 +14,7 @@ from app.api.deps import AppSettings, CurrentUser, DbSession, client_ip, current
 from app.core.enums import AuditOutcome
 from app.core.errors import RateLimitError
 from app.core.security import create_access_token
+from app.core.time import iso_utc
 from app.db.models import User
 from app.schemas.auth import (
     LoginRequest,
@@ -43,12 +44,9 @@ def get_login_guard(request: Request, settings: AppSettings) -> LoginGuard:
     """One guard per application, so counters survive across requests."""
     guard = getattr(request.app.state, "login_guard", None)
     if guard is None:
-        guard = LoginGuard(
-            max_attempts=settings.auth_max_login_attempts,
-            window_seconds=settings.auth_login_window_seconds,
-            lockout_seconds=settings.auth_lockout_seconds,
-            ip_max_attempts=settings.auth_max_login_attempts_per_ip,
-        )
+        from app.security.limit_factory import login_guard
+
+        guard = login_guard(settings)
         request.app.state.login_guard = guard
     return guard
 
@@ -83,7 +81,9 @@ def login(
     # Refuse before the expensive bcrypt work, and refuse *before* the credential
     # check so a correct password during a lockout is still rejected - otherwise
     # the lockout would be trivial to bypass.
-    if guard.is_locked(email=email, ip_address=ip):
+    try:
+        attempt_id = guard.begin_attempt(email=email, ip_address=ip)
+    except RateLimitError:
         record_audit(
             session,
             action=AuditAction.LOGIN_THROTTLED,
@@ -93,20 +93,17 @@ def login(
             ip_address=ip,
             commit=True,
         )
-        raise RateLimitError(
-            "Too many failed sign-in attempts. Please wait and try again.",
-            details={"retry_after_seconds": int(guard.lockout_seconds())},
-        )
+        raise
 
     try:
         user = authenticate(session, email=email, password=payload.password, ip_address=ip)
     except Exception:
         # Count the failure, then re-raise: the caller still receives the generic
         # "invalid email or password" response, so lockout is not an oracle.
-        guard.record_failure(email=email, ip_address=ip)
+        guard.record_failure(email=email, ip_address=ip, attempt_id=attempt_id)
         raise
 
-    guard.record_success(email=email, ip_address=ip)
+    guard.record_success(email=email, ip_address=ip, attempt_id=attempt_id)
 
     issued = create_access_token(subject=str(user.id), role=user.role.value, settings=settings)
     record_session(
@@ -214,8 +211,8 @@ def sessions(
         sessions=[
             SessionInfo(
                 jti=record.jti,
-                created_at=record.created_at.isoformat() if record.created_at else None,
-                expires_at=record.expires_at.isoformat() if record.expires_at else None,
+                created_at=iso_utc(record.created_at),
+                expires_at=iso_utc(record.expires_at),
                 ip_address=record.ip_address,
                 user_agent=record.user_agent,
                 current=record.jti == current,

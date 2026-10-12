@@ -33,6 +33,8 @@ export interface UseChatResult {
     category?: string,
   ) => Promise<void>
   dismissError: () => void
+  canRetry: boolean
+  retry: () => Promise<void>
 }
 
 function describe(cause: unknown, fallback: string): string {
@@ -61,9 +63,12 @@ export function useChat(onUnauthorized: () => void): UseChatResult {
   const [notice, setNotice] = useState<string | null>(null)
   const [raisedTickets, setRaisedTickets] = useState<Record<number, string>>({})
   const [raisingTicketId, setRaisingTicketId] = useState<number | null>(null)
+  const [canRetry, setCanRetry] = useState(false)
 
   // Guards against a late response from a conversation the user has left.
   const activeIdRef = useRef<number | null>(null)
+  const sendingRef = useRef(false)
+  const retryRef = useRef<{ id: number; content: string; key: string } | null>(null)
   // Held in a ref so the initial load effect does not depend on the identity of
   // the caller's callback. Depending on it directly re-runs the effect on every
   // render and turns the workspace into an endless fetch loop.
@@ -122,6 +127,9 @@ export function useChat(onUnauthorized: () => void): UseChatResult {
         const detail = await api.chat.getConversation(id)
         if (activeIdRef.current !== id) return
         setMessages(detail.messages)
+        setRaisedTickets(Object.fromEntries(detail.messages.flatMap((message) =>
+          message.payload?.requested_ticket_reference
+            ? [[message.id, message.payload.requested_ticket_reference]] : [])))
       } catch (cause) {
         if (activeIdRef.current !== id) return
         handleFailure(cause, 'Could not open that conversation.')
@@ -171,12 +179,14 @@ export function useChat(onUnauthorized: () => void): UseChatResult {
   const send = useCallback(
     async (content: string) => {
       const trimmed = content.trim()
-      if (!trimmed) return
+      if (!trimmed || sendingRef.current) return
+      sendingRef.current = true
 
       let conversationId = activeIdRef.current
       setError(null)
       setNotice(null)
       setStatus('sending')
+      setCanRetry(false)
 
       try {
         if (conversationId === null) {
@@ -186,21 +196,28 @@ export function useChat(onUnauthorized: () => void): UseChatResult {
           setActiveId(created.id)
         }
 
-        const result = await api.chat.sendMessage(conversationId, trimmed)
+        const previousRequest = retryRef.current
+        const requestKey = previousRequest?.id === conversationId && previousRequest.content === trimmed
+          ? previousRequest.key
+          : Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
+        retryRef.current = { id: conversationId, content: trimmed, key: requestKey }
+        const result = await api.chat.sendMessage(conversationId, trimmed, undefined, requestKey)
+        retryRef.current = null
         if (activeIdRef.current !== conversationId) {
           // The user switched conversations while the answer was generating.
           await refreshList()
           return
         }
-        setMessages((previous) => [
-          ...previous,
-          result.user_message,
-          result.assistant_message,
-        ])
+        setMessages((previous) => {
+          const ids = new Set(previous.map((message) => message.id))
+          return [...previous, ...[result.user_message, result.assistant_message].filter((message) => !ids.has(message.id))]
+        })
         await refreshList()
       } catch (cause) {
+        setCanRetry(retryRef.current !== null)
         handleFailure(cause, 'The assistant could not answer. Please try again.')
       } finally {
+        sendingRef.current = false
         setStatus('idle')
       }
     },
@@ -208,6 +225,10 @@ export function useChat(onUnauthorized: () => void): UseChatResult {
   )
 
   const dismissError = useCallback(() => setError(null), [])
+  const retry = useCallback(async () => {
+    const pending = retryRef.current
+    if (pending && activeIdRef.current === pending.id) await send(pending.content)
+  }, [send])
 
   const raiseTicket = useCallback(
     // `other` rather than `security`: the category decides the owning queue on the
@@ -218,7 +239,7 @@ export function useChat(onUnauthorized: () => void): UseChatResult {
       setNotice(null)
       setRaisingTicketId(messageId)
       try {
-        const ticket = await api.tickets.raise(title, description, category)
+        const ticket = await api.tickets.raise(title, description, category, undefined, messageId)
         setRaisedTickets((previous) => ({ ...previous, [messageId]: ticket.reference }))
         setNotice(`Ticket ${ticket.reference} raised. The service desk can follow up.`)
       } catch (cause) {
@@ -246,5 +267,7 @@ export function useChat(onUnauthorized: () => void): UseChatResult {
     send,
     raiseTicket,
     dismissError,
+    canRetry,
+    retry,
   }
 }

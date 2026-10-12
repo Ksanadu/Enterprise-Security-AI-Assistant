@@ -83,6 +83,8 @@ export function useDashboard(onUnauthorized: () => void, enabled: boolean): UseD
   useEffect(() => {
     if (!enabled) return
     void refresh()
+    const timer = window.setInterval(() => { if (!document.hidden) void refresh() }, 15000)
+    return () => window.clearInterval(timer)
   }, [enabled, refresh])
 
   useEffect(() => {

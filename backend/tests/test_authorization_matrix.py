@@ -28,6 +28,7 @@ pytestmark = pytest.mark.security
 #: Endpoints reachable without a token, and why.
 PUBLIC_ENDPOINTS: dict[tuple[str, str], str] = {
     ("GET", "/api/v1/health"): "liveness probe",
+    ("GET", "/api/v1/ready"): "business readiness probe (no credentials or incident content)",
     ("GET", "/api/v1/meta"): "public configuration summary",
     ("POST", "/api/v1/auth/login"): "sign-in",
 }

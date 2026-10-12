@@ -84,9 +84,7 @@ def extract_json_object(text: str) -> dict[str, Any] | None:
 
     # Reject pathological nesting before handing the text to a recursive decoder.
     if _nesting_exceeds(candidate, MAX_JSON_DEPTH):
-        logger.warning(
-            "structured_output_rejected reason=nesting_depth chars=%d", len(candidate)
-        )
+        logger.warning("structured_output_rejected reason=nesting_depth chars=%d", len(candidate))
         return None
 
     try:

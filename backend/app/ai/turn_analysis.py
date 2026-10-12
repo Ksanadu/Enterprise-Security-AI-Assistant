@@ -37,6 +37,8 @@ class TurnAnalysis:
     #: Set when the workflow responded by asking for one more detail instead of
     #: filing a ticket (the medium-risk tier).
     clarifying_question: str | None = None
+    workflow_status: str = "not_required"
+    workflow_task_id: str | None = None
 
     @property
     def requires_escalation(self) -> bool:

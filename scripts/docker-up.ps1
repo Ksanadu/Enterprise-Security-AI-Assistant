@@ -299,7 +299,7 @@ try {
         # this stack, and a perfectly healthy deployment is reported as never
         # becoming ready.
         try {
-            $probe = Invoke-WebRequest -Uri "http://127.0.0.1:$httpPort/api/v1/health" `
+            $probe = Invoke-WebRequest -Uri "http://127.0.0.1:$httpPort/api/v1/ready" `
                 -UseBasicParsing -TimeoutSec 5 -NoProxy
             if ($probe.StatusCode -eq 200) {
                 $ready = $true

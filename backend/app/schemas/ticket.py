@@ -45,12 +45,14 @@ class TicketDetail(TicketSummary):
     #: Whether the caller may change this ticket's status.
     can_update: bool = False
     events: list[TicketEventOut] = Field(default_factory=list)
+    human_acknowledged: bool = False
 
 
 class TicketListResponse(BaseModel):
     count: int
     statistics: dict = Field(default_factory=dict)
     tickets: list[TicketSummary] = Field(default_factory=list)
+    next_offset: int | None = None
 
 
 class TicketStatisticsResponse(BaseModel):
@@ -84,3 +86,4 @@ class CreateTicketRequest(BaseModel):
     #: Neither `severity` nor `owner_role` is declared here: a caller cannot set the
     #: urgency of their own report or choose a queue to file into.
     category: str = Field(default="other", max_length=64)
+    message_id: int | None = Field(default=None, ge=1)

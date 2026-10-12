@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   ApiError,
+  api,
   apiRequest,
   clearAccessToken,
   getAccessToken,
@@ -28,6 +29,25 @@ afterEach(() => {
 })
 
 describe('apiRequest', () => {
+  it('loads notification pages with authentication and preserves the pagination offset', async () => {
+    setAccessToken('security-test-token')
+    const page = { notifications: [], total: 80, next_offset: 50, receiver_configured: false }
+    fetchMock.mockImplementation(async () => jsonResponse(page))
+    await expect(api.operations.notifications()).resolves.toEqual(page)
+    await api.operations.notifications(50)
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/v1/operations/notifications?offset=0&limit=50',
+      '/api/v1/operations/notifications?offset=50&limit=50',
+    ])
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).toMatchObject({ Authorization: 'Bearer security-test-token' })
+  })
+
+  it('encodes retry identifiers and surfaces a denied retry without claiming success', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ error: { code: 'permission_denied', message: 'Denied.' } }, 403))
+    await expect(api.operations.retryNotification('event/1?x=y')).rejects.toMatchObject({ status: 403 })
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/operations/notifications/event%2F1%3Fx%3Dy/retry', expect.objectContaining({ method: 'POST', body: '{}' }))
+  })
+
   it('returns parsed JSON on success', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ status: 'ok' }))
     await expect(apiRequest<{ status: string }>('/health')).resolves.toEqual({ status: 'ok' })

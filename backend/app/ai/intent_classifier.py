@@ -27,6 +27,8 @@ from app.ai.llm import LLMClient, get_llm_client
 from app.ai.structured import clamp_confidence, parse_model
 from app.core.config import Settings, get_settings
 from app.core.enums import Intent
+from app.core.text_analysis import chinese_intent, routine_activity
+from app.security.redaction import redact_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -531,6 +533,20 @@ class IntentClassifier:
     # -- rules ------------------------------------------------------------
     def classify_with_rules(self, question: str) -> IntentResult:
         text = question or ""
+        if routine_activity(text):
+            return IntentResult(Intent.SECURITY_FAQ, 0.9, "rules", "routine or denied activity")
+        from app.core.policy_facts import domain_intent
+
+        domain = domain_intent(text)
+        if domain is not None:
+            return IntentResult(
+                domain, 0.9, "rules", "observed domain fact", (domain.value, "domain_fact")
+            )
+        bilingual = chinese_intent(text)
+        if bilingual is not None:
+            return IntentResult(
+                bilingual, 0.85, "rules", "Chinese security topic", ("chinese_topic",)
+            )
         scores: dict[Intent, float] = {}
         signals: dict[Intent, list[str]] = {}
 
@@ -582,7 +598,7 @@ class IntentClassifier:
         try:
             completion = self._client.complete(
                 system_prompt=CLASSIFIER_SYSTEM_PROMPT,
-                user_prompt=question,
+                user_prompt=redact_credentials(question),
                 context_block="",
                 max_tokens=200,
             )

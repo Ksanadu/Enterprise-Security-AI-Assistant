@@ -54,10 +54,42 @@ pytestmark = pytest.mark.security
 # ---------------------------------------------------------------------------
 
 
+def reject_duplicate_keys(loader, node):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node)
+        if key in mapping:
+            raise ValueError(f"Duplicate YAML key: {key}")
+        mapping[key] = loader.construct_object(value_node)
+    return mapping
+
+
+class UniqueKeyLoader(yaml.SafeLoader):
+    pass
+
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, reject_duplicate_keys
+)
+
+
+def load_unique_yaml(raw):
+    loader = UniqueKeyLoader(raw)
+    try:
+        return loader.get_single_data()
+    finally:
+        loader.dispose()
+
+
+def test_compose_parser_rejects_duplicate_settings():
+    with pytest.raises(ValueError, match="Duplicate YAML key: stop_grace_period"):
+        load_unique_yaml("backend:\n  stop_grace_period: 90s\n  stop_grace_period: 15s\n")
+
+
 @pytest.fixture(scope="module")
 def compose() -> dict[str, Any]:
     assert COMPOSE_FILE.is_file(), f"missing {COMPOSE_FILE}"
-    data = yaml.safe_load(COMPOSE_FILE.read_text(encoding="utf-8"))
+    data = load_unique_yaml(COMPOSE_FILE.read_text(encoding="utf-8"))
     assert isinstance(data, dict), "docker-compose.yml must be a YAML mapping"
     return data
 
@@ -323,9 +355,9 @@ class TestComposeContainerPaths:
         # A bind mount would be owned by the host user while the container runs
         # as uid 10001, and would also let the container write into the repo.
         for source, _ in _volume_mounts(services["backend"]):
-            assert re.fullmatch(r"[A-Za-z0-9_.-]+", source), (
-                f"expected a named volume, got host path {source!r}"
-            )
+            assert re.fullmatch(
+                r"[A-Za-z0-9_.-]+", source
+            ), f"expected a named volume, got host path {source!r}"
 
     def test_the_declared_volume_exists(self, compose: dict[str, Any]) -> None:
         declared = set(compose.get("volumes") or {})
@@ -387,9 +419,9 @@ class TestComposeExposure:
         # Loopback-only, whether the port number is literal or interpolated.
         pattern = r"^127\.0\.0\.1:(\d+|\$\{[A-Z_]+:-\d+\}):(\d+|\$\{[A-Z_]+:-\d+\})$"
         for mapping in services["backend"]["ports"]:
-            assert re.match(pattern, str(mapping)), (
-                f"backend port must be loopback-only, got {mapping!r}"
-            )
+            assert re.match(
+                pattern, str(mapping)
+            ), f"backend port must be loopback-only, got {mapping!r}"
 
     def test_frontend_has_an_explicit_default_port(self, services: dict[str, Any]) -> None:
         mapping = str(services["frontend"]["ports"][0])
@@ -437,8 +469,7 @@ class TestComposeSecrets:
         assert entries, "the backend reads no environment file at all"
         optional = [path for path, required in entries if not required]
         assert optional == [".env"], (
-            "every env_file entry must be optional, or a fresh clone cannot start: "
-            f"{entries}"
+            "every env_file entry must be optional, or a fresh clone cannot start: " f"{entries}"
         )
 
     @pytest.mark.parametrize("key", FORBIDDEN_KEYS)
@@ -449,7 +480,11 @@ class TestComposeSecrets:
 
     def test_compose_file_contains_no_credential_shaped_value(self) -> None:
         text = COMPOSE_FILE.read_text(encoding="utf-8")
-        for pattern in (r"sk-[A-Za-z0-9]{16,}", r"AKIA[0-9A-Z]{16}", r"-----BEGIN [A-Z ]*PRIVATE KEY-----"):
+        for pattern in (
+            r"sk-[A-Za-z0-9]{16,}",
+            r"AKIA[0-9A-Z]{16}",
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+        ):
             assert not re.search(pattern, text), f"credential-shaped value in compose: {pattern}"
 
     def test_env_file_itself_is_gitignored(self) -> None:
@@ -462,9 +497,9 @@ class TestComposeSecrets:
     ) -> None:
         documented = _env_example_keys()
         undocumented = sorted(set(services["backend"]["environment"]) - documented)
-        assert not undocumented, (
-            f"compose overrides variables that .env.example does not document: {undocumented}"
-        )
+        assert (
+            not undocumented
+        ), f"compose overrides variables that .env.example does not document: {undocumented}"
 
 
 class TestComposeSemantics:
@@ -591,8 +626,7 @@ class TestComposeSemantics:
             env=environment,
         )
         assert completed.returncode == 0, (
-            "a fresh clone with no .env cannot start:\n"
-            f"{completed.stderr or completed.stdout}"
+            "a fresh clone with no .env cannot start:\n" f"{completed.stderr or completed.stdout}"
         )
 
 
@@ -726,9 +760,9 @@ class TestTheStackStartsWithNoConfigurationFile:
 
         targets = [target for _, target in _volume_mounts(services["backend"])]
         database = _container_path(environment["DATABASE_URL"][len("sqlite://") :])
-        assert any(target in database.parents for target in targets), (
-            f"{database} is not covered by a mounted volume: {targets}"
-        )
+        assert any(
+            target in database.parents for target in targets
+        ), f"{database} is not covered by a mounted volume: {targets}"
 
     def test_the_cors_origin_follows_the_published_port(
         self, environment: dict[str, str], services: dict[str, Any]
@@ -940,6 +974,8 @@ class TestOneCommandLauncher:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             check=False,
             cwd=str(cwd),
@@ -1005,9 +1041,7 @@ class TestOneCommandLauncher:
         environment = dict(os.environ)
         environment["PATH"] = str(fake_bin) + os.pathsep + environment.get("PATH", "")
 
-        completed = self._run_ps1(
-            powershell, ["-TimeoutSeconds", "1"], fake_repo, environment
-        )
+        completed = self._run_ps1(powershell, ["-TimeoutSeconds", "1"], fake_repo, environment)
         combined = completed.stdout + completed.stderr
 
         assert "Docker Compose version v2.29.7-fake" in combined, combined
@@ -1049,9 +1083,7 @@ class TestOneCommandLauncher:
         environment = dict(os.environ)
         environment["PATH"] = str(fake_bin) + os.pathsep + environment.get("PATH", "")
 
-        completed = self._run_ps1(
-            powershell, ["-TimeoutSeconds", "1"], fake_repo, environment
-        )
+        completed = self._run_ps1(powershell, ["-TimeoutSeconds", "1"], fake_repo, environment)
         combined = completed.stdout + completed.stderr
         assert "already set" in combined, combined
         assert existing in (fake_repo / ".env").read_text(encoding="utf-8")
@@ -1081,9 +1113,7 @@ class TestOneCommandLauncher:
         environment = dict(os.environ)
         environment["PATH"] = str(fake_bin) + os.pathsep + environment.get("PATH", "")
 
-        completed = self._run_ps1(
-            powershell, ["-TimeoutSeconds", "6"], fake_repo, environment
-        )
+        completed = self._run_ps1(powershell, ["-TimeoutSeconds", "6"], fake_repo, environment)
         combined = completed.stdout + completed.stderr
         calls = self._recorded_calls(fake_bin)
 
@@ -1096,13 +1126,10 @@ class TestOneCommandLauncher:
         assert "ESAA_API_PORT=9091" in calls, calls
         # And it reported that port, not the default.
         assert "8080" not in combined, (
-            "the launcher reported the default port although .env sets another "
-            f"one:\n{combined}"
+            "the launcher reported the default port although .env sets another " f"one:\n{combined}"
         )
 
-    def test_it_refuses_to_start_a_production_stack(
-        self, powershell: str, fake_repo: Path
-    ) -> None:
+    def test_it_refuses_to_start_a_production_stack(self, powershell: str, fake_repo: Path) -> None:
         """The demo launcher seeds simulated users, which production forbids.
 
         Starting it anyway would fail deep inside the application; saying so up
@@ -1210,9 +1237,7 @@ class TestOneCommandLauncher:
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert "docker compose" in completed.stdout
 
-    def test_the_shell_script_bootstraps_the_env_file(
-        self, shell: str, fake_repo: Path
-    ) -> None:
+    def test_the_shell_script_bootstraps_the_env_file(self, shell: str, fake_repo: Path) -> None:
         """The same bootstrap as the PowerShell test, in the POSIX implementation.
 
         A fake `docker` makes the prerequisites check pass; nothing answers the
@@ -1250,9 +1275,9 @@ class TestOneCommandLauncher:
         # "AssertionError:" with nothing after it.
         assert "dev-only-insecure-change-me" not in key, combined
         assert len(key) >= 32, f"key too short to sign with: {key!r}\n{combined}"
-        assert re.fullmatch(r"[0-9a-f]+", key), (
-            f"expected the portable hex secret, got {key!r}\n{combined}"
-        )
+        assert re.fullmatch(
+            r"[0-9a-f]+", key
+        ), f"expected the portable hex secret, got {key!r}\n{combined}"
         assert "RETRIEVAL_RELATIVE_FLOOR=0.5" in env_text, env_text[:400]
 
         assert completed.returncode != 0, combined
@@ -1298,9 +1323,9 @@ class TestOneCommandLauncher:
         combined = completed.stdout + completed.stderr
         calls = self._recorded_calls(fake_bin)
 
-        assert "ESAA_HTTP_PORT=9090" in calls, (
-            f"the launcher did not pass the .env port to Compose:\n{calls}\n{combined}"
-        )
+        assert (
+            "ESAA_HTTP_PORT=9090" in calls
+        ), f"the launcher did not pass the .env port to Compose:\n{calls}\n{combined}"
         assert "ESAA_API_PORT=9091" in calls, calls
         assert "8080" not in combined, combined
 
@@ -1356,7 +1381,7 @@ class TestBackendDockerfile:
     ) -> None:
         healthchecks = _find(stages[-1], "HEALTHCHECK")
         assert healthchecks, "no HEALTHCHECK"
-        assert "/api/v1/health" in " ".join(healthchecks)
+        assert "/api/v1/ready" in " ".join(healthchecks)
 
     def test_has_an_exec_form_command(self, stages: list[list[str]]) -> None:
         commands = _find(stages[-1], "CMD")
@@ -1392,18 +1417,16 @@ class TestFrontendDockerfile:
         # image build rather than shipping broken JavaScript.
         assert "npm run build" in " ".join(stages[0])
 
-    def test_only_the_build_output_reaches_the_runtime_stage(
-        self, stages: list[list[str]]
-    ) -> None:
+    def test_only_the_build_output_reaches_the_runtime_stage(self, stages: list[list[str]]) -> None:
         copies = [line for line in _find(stages[-1], "COPY") if "--from" in line]
         assert copies, "runtime stage does not copy the build output"
         assert all("/build/dist" in line for line in copies)
         assert "node_modules" not in " ".join(stages[-1])
 
         destinations = _copy_destinations(stages[-1])
-        assert _container_path("/usr/share/nginx/html") in destinations, (
-            f"build output is not served from nginx's document root: {destinations}"
-        )
+        assert (
+            _container_path("/usr/share/nginx/html") in destinations
+        ), f"build output is not served from nginx's document root: {destinations}"
 
     def test_build_context_carries_the_settings_the_image_needs(
         self, stages: list[list[str]]
@@ -1599,6 +1622,7 @@ class TestDockerignore:
 
 class TestLocalRunScript:
     """The repository must be runnable without a container runtime."""
+
     @pytest.fixture(scope="class")
     def script(self) -> str:
         path = PROJECT_ROOT / "scripts" / "run-local.ps1"

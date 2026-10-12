@@ -99,6 +99,12 @@ class UpstreamServiceError(AppError):
     message = "An upstream service failed."
 
 
+class SecurityControlsUnavailableError(AppError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = "security_controls_unavailable"
+    message = "Shared security controls are unavailable. Please retry later."
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Attach consistent JSON error responses to the application."""
 

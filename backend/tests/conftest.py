@@ -53,8 +53,19 @@ def _settings_env() -> dict[str, str]:
         "DEMO_USER_PASSWORD": DEMO_PASSWORD,
         "PASSWORD_HASH_ROUNDS": "4",
         "LLM_PROVIDER": "mock",
+        "LLM_API_KEY": "",
+        "EMBEDDING_API_KEY": "",
         "EMBEDDING_PROVIDER": "tfidf",
         "VECTOR_STORE": "memory",
+        "WORKFLOW_RETRY_INTERVAL_SECONDS": "0",
+        # Simulated tests must never inherit an operator's real recipients.
+        "NOTIFICATION_WEBHOOK_URL": "",
+        "NOTIFICATION_LEAD_WEBHOOK_URL": "",
+        "NOTIFICATION_SIGNING_SECRET": "",
+        "NOTIFICATION_CA_BUNDLE_FILE": "",
+        "NOTIFICATION_POLL_INTERVAL_SECONDS": "0",
+        "RETENTION_POLICY_FILE": "",
+        "RETENTION_BACKUP_DIR": "",
         "RETRIEVAL_TOP_K": "6",
         "RETRIEVAL_MIN_SCORE": "0.05",
         "RETRIEVAL_RELATIVE_FLOOR": "0.5",
@@ -70,6 +81,7 @@ def _settings_env() -> dict[str, str]:
 def settings(
     _settings_env: dict[str, str],
     tmp_path: Path,
+    index_cache_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[Settings]:
     """Per-test settings pointing at an isolated SQLite database."""
@@ -77,6 +89,10 @@ def settings(
         monkeypatch.setenv(key, value)
     # Unique database file per test -> no cross-test contamination.
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
+    # Share only a disposable vector cache, never an index object or database.
+    # Startup reloads documents and verifies the content/config fingerprint, so
+    # each test still gets fresh permissions and service state.
+    monkeypatch.setenv("VECTOR_STORE_PATH", str(index_cache_dir))
 
     get_settings.cache_clear()
     reset_engine_cache()
@@ -86,6 +102,11 @@ def settings(
     finally:
         reset_engine_cache()
         get_settings.cache_clear()
+
+
+@pytest.fixture(scope="session")
+def index_cache_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return tmp_path_factory.mktemp("esaa-vector-cache")
 
 
 @pytest.fixture

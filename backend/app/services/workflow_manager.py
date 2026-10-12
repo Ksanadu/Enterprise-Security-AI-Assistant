@@ -232,7 +232,7 @@ class WorkflowManager:
         session: Session,
         *,
         decision: WorkflowDecision,
-        user: User,
+        user: User | None,
         analysis: TurnAnalysis,
         conversation_id: int | None,
         question: str,

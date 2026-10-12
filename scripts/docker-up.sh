@@ -252,7 +252,7 @@ while [ "$elapsed" -lt "$TIMEOUT" ]; do
     # instead of reaching its own message - which is exactly the confusing
     # failure the message exists to prevent.
     status=0
-    probe "http://127.0.0.1:$HTTP_PORT/api/v1/health" || status=$?
+    probe "http://127.0.0.1:$HTTP_PORT/api/v1/ready" || status=$?
 
     if [ "$status" -eq 0 ]; then
         ready=1

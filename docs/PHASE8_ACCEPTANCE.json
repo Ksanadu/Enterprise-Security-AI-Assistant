@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "overall_status": "local_delivery_ready_external_acceptance_pending",
+  "specification": "PRODUCT_SPEC.md",
+  "criteria": [
+    {"id": 1, "status": "local_verified", "implementation": ["backend/app/api/routes/auth.py"], "checks": ["backend/tests/test_auth.py", "backend/tests/test_auth_sessions.py", "backend/tests/test_user_provisioning.py"], "evidence": ["engineering", "demo", "rollback"]},
+    {"id": 2, "status": "local_verified", "implementation": ["backend/app/api/routes/chat.py"], "checks": ["backend/tests/test_chat_api.py", "backend/tests/test_phase2_reliability.py"], "evidence": ["engineering", "demo"]},
+    {"id": 3, "status": "local_core_verified_quality_gate_failed", "implementation": ["backend/app/ai/intent_classifier.py"], "checks": ["backend/tests/test_phase1_safety.py"], "evidence": ["engineering", "demo", "quality_first", "quality_regression"]},
+    {"id": 4, "status": "local_verified_live_embedding_pending", "implementation": ["backend/app/rag/retriever.py", "backend/app/rag/embeddings.py"], "checks": ["backend/tests/test_rag_pipeline.py"], "evidence": ["engineering", "demo"]},
+    {"id": 5, "status": "local_verified_answer_review_pending", "implementation": ["backend/app/ai/response_generator.py", "frontend/src/components/SourceCitations.tsx"], "checks": ["backend/tests/test_phase2_reliability.py"], "evidence": ["engineering", "demo"]},
+    {"id": 6, "status": "local_verified_docker_pending", "implementation": ["backend/app/api/deps.py", "backend/app/rag/retriever.py"], "checks": ["backend/tests/test_authorization_matrix.py"], "evidence": ["engineering", "demo", "rollback"]},
+    {"id": 7, "status": "local_core_verified_independent_review_pending", "implementation": ["backend/app/ai/risk_classifier.py"], "checks": ["backend/tests/test_phase1_safety.py"], "evidence": ["engineering", "demo", "quality_regression"]},
+    {"id": 8, "status": "local_verified_docker_pending", "implementation": ["backend/app/services/workflow_tasks.py", "backend/app/services/workflow_worker.py"], "checks": ["backend/tests/test_phase2_reliability.py"], "evidence": ["engineering", "demo", "rollback"]},
+    {"id": 9, "status": "local_verified", "implementation": ["frontend/src/components/TicketBoard.tsx", "frontend/src/components/Dashboard.tsx"], "checks": ["frontend/src/App.test.tsx"], "evidence": ["engineering", "demo"]},
+    {"id": 10, "status": "actual_docker_acceptance_pending", "implementation": ["docker-compose.yml", "scripts/container-acceptance.py"], "checks": ["backend/tests/test_deployment_assets.py"], "evidence": ["engineering"]},
+    {"id": 11, "status": "local_documents_verified_signoff_pending", "implementation": ["README.md", "docs/PHASE8_HANDOFF.md"], "checks": ["backend/tests/test_documentation.py"], "evidence": ["engineering"]},
+    {"id": 12, "status": "dataset_assets_verified_independent_review_pending", "implementation": ["backend/tests/data/evaluation_questions.json", "backend/evaluation/frozen-v1.json", "backend/evaluation/thresholds-v1.json"], "checks": ["backend/tests/test_evaluation_set.py"], "evidence": ["engineering", "quality_first", "quality_regression"]},
+    {"id": 13, "status": "engineering_verified_conditional_skips", "implementation": ["scripts/check.ps1"], "checks": ["backend/tests/test_documentation.py"], "evidence": ["engineering"]}
+  ],
+  "blocked_gates": [
+    {"id": "docker", "owner_role": "platform_operator", "required": "Actual Compose startup, proxy/CSP/volume, restart/fault and browser evidence; mock and real modes tracked separately.", "runbook": "docs/CONTAINER_ACCEPTANCE.md"},
+    {"id": "live_models", "owner_role": "model_operator_and_answer_reviewer", "required": "Configured LLM/Embedding services, explicit network budget, actual three-mode results, manual citation/action review and cost record.", "runbook": "docs/QUALITY_EVALUATION.md"},
+    {"id": "independent_quality", "owner_role": "independent_annotation_reviewer", "required": "Resolve six frozen-v1 intent label conflicts without changing v1 or thresholds, freeze new unused holdout and independently review answers.", "runbook": "docs/QUALITY_LABEL_CONFLICTS.md"},
+    {"id": "formal_operations", "owner_role": "pilot_platform_security_and_data_owners", "required": "Public frontend TLS/proxy, formal recipients and alert supervision, approved data policy/ACL/encryption/secret recovery, formal image rollback and recorded RPO/RTO.", "runbook": "docs/OPS_PILOT_RUNBOOK.md"}
+  ],
+  "signed_off": false
+}

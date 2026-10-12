@@ -135,7 +135,7 @@ def require_roles(*allowed: Role):
 
 
 def per_user_limiter(request: Request, *, name: str, limit: int) -> SlidingWindowLimiter:
-    """One in-process limiter per (application, name), created on first use.
+    """One runtime adapter per name; shared persistent budgets by default.
 
     Every endpoint that embeds a query and runs a vector search is the *same*
     expensive primitive, so they must be throttled alike - a limiter that covers one
@@ -145,7 +145,9 @@ def per_user_limiter(request: Request, *, name: str, limit: int) -> SlidingWindo
     """
     limiter = getattr(request.app.state, name, None)
     if limiter is None:
-        limiter = SlidingWindowLimiter(limit=limit)
+        from app.security.limit_factory import window_limiter
+
+        limiter = window_limiter(request.app.state.settings, scope=name, limit=limit)
         setattr(request.app.state, name, limiter)
     return limiter
 

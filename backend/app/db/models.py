@@ -14,6 +14,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -83,6 +84,7 @@ class Conversation(Base, TimestampMixin):
     title: Mapped[str] = mapped_column(String(200), nullable=False, default="New conversation")
     #: Highest risk level observed in this conversation, used to keep escalations sticky.
     peak_risk_level: Mapped[str] = mapped_column(String(16), nullable=False, default="low")
+    purged_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="conversations")
     messages: Mapped[list[Message]] = relationship(
@@ -115,6 +117,7 @@ class Message(Base, TimestampMixin):
     intent: Mapped[str | None] = mapped_column(String(32), index=True)
     risk_level: Mapped[str | None] = mapped_column(String(16), index=True)
     escalated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    purged_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
 
@@ -159,6 +162,7 @@ class Ticket(Base, TimestampMixin):
     )
     #: Truncated copy of the triggering user query (audit + triage context).
     related_query: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    purged_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_by: Mapped[User | None] = relationship()
     events: Mapped[list[TicketEvent]] = relationship(
@@ -241,6 +245,7 @@ class AuditLog(Base):
     request_id: Mapped[str | None] = mapped_column(String(64), index=True)
     ip_address: Mapped[str | None] = mapped_column(String(64))
     detail: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    purged_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<AuditLog id={self.id} action={self.action} outcome={self.outcome.value}>"
@@ -286,3 +291,113 @@ class UserSession(Base):
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         state = "revoked" if self.is_revoked else "active"
         return f"<UserSession id={self.id} user_id={self.user_id} {state}>"
+
+
+class WorkflowTask(Base, TimestampMixin):
+    """Durable incident work; survives model failure, retries and chat deletion."""
+
+    __tablename__ = "workflow_tasks"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL"), unique=True
+    )
+    conversation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"), index=True
+    )
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    lease_until: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    ticket_reference: Mapped[str | None] = mapped_column(String(32))
+    error_code: Mapped[str | None] = mapped_column(String(64))
+
+
+class TicketSequence(Base):
+    __tablename__ = "ticket_sequences"
+    key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    value: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class ChatRequest(Base, TimestampMixin):
+    """A client request key names one turn, including an in-progress turn."""
+
+    __tablename__ = "chat_requests"
+    __table_args__ = (
+        UniqueConstraint("user_id", "conversation_id", "request_key", name="uq_chat_request_key"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"))
+    request_key: Mapped[str] = mapped_column(String(128))
+    question_hash: Mapped[str] = mapped_column(String(64))
+    actor_role: Mapped[str] = mapped_column(String(32))
+    pending_content: Mapped[str] = mapped_column(Text, default="")
+    lease_until: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    user_message_id: Mapped[int | None] = mapped_column(
+        ForeignKey("messages.id", ondelete="SET NULL")
+    )
+    response: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class ManualTicketLink(Base):
+    """A message can be used to request at most one manual follow-up ticket."""
+
+    __tablename__ = "manual_ticket_links"
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("messages.id", ondelete="CASCADE"), primary_key=True
+    )
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id", ondelete="CASCADE"))
+
+
+class SecurityLimitBucket(Base):
+    """Shared request/failure budgets; HMAC keys omit raw account and IP values."""
+
+    __tablename__ = "security_limit_buckets"
+    scope: Mapped[str] = mapped_column(String(64), primary_key=True)
+    key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    events: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+    locked_until: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    expires_at: Mapped[float] = mapped_column(Float, nullable=False, index=True)
+
+
+class NotificationOutbox(Base):
+    """Transactional intent; delivered means accepted by the receiver."""
+
+    __tablename__ = "notification_outbox"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    event_key: Mapped[str] = mapped_column(String(160), unique=True, nullable=False)
+    ticket_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tickets.id", ondelete="SET NULL"), index=True
+    )
+    ticket_reference: Mapped[str] = mapped_column(String(32), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempt_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    lease_token: Mapped[str | None] = mapped_column(String(36))
+    lease_until: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    delivered_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    next_reminder_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    error_code: Mapped[str | None] = mapped_column(String(64))
+
+
+class DataHold(Base):
+    """Operator-managed preservation; history lives in the audit."""
+
+    __tablename__ = "data_holds"
+    resource_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    resource_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    case_label: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    released_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "state": "example_not_approved",
+  "policy_id": "replace-with-reviewed-policy-id",
+  "approved_by": "replace-with-data-owner",
+  "conversations_days": null,
+  "closed_tickets_days": null,
+  "completed_workflows_days": null,
+  "audit_days": null,
+  "notifications_days": null,
+  "backup_days": null,
+  "batch_limit": 200
+}

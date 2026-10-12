@@ -1,0 +1,8 @@
+{
+  "dataset_sha256": "5c187684ac43ed5e5199bfa8e4ea61d1003355b2e0e42966d794f5d6c90097e2",
+  "validation_used_for_tuning": true,
+  "first_independent_result": "failed",
+  "first_independent_evidence": "logs/phase6/validation-first/report.json",
+  "recorded_at": "2026-10-12",
+  "subsequent_use": "regression only; a new independently reviewed holdout is required for independent acceptance"
+}

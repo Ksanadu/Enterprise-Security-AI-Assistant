@@ -32,6 +32,9 @@ from app.ai.llm import LLMClient, get_llm_client
 from app.ai.structured import clamp_confidence, parse_model
 from app.core.config import Settings, get_settings
 from app.core.enums import Intent, RiskLevel
+from app.core.policy_facts import policy_fact
+from app.core.text_analysis import chinese_risk, no_disclosure, routine_activity
+from app.security.redaction import redact_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -568,7 +571,10 @@ INCIDENT_INTENTS = frozenset({Intent.PHISHING, Intent.SECURITY_INCIDENT})
 def is_negated(text: str, match_start: int) -> bool:
     """True when the text immediately before a match negates it."""
     prefix = text[max(0, match_start - 40) : match_start]
-    return NEGATION_PATTERN.search(prefix) is not None
+    prefix = re.split(r"\b(?:but|however|then)\b|[.;!?]|但是|但|随后|然而", prefix, flags=re.I)[-1]
+    return NEGATION_PATTERN.search(prefix) is not None or bool(
+        re.search(r"(?:没有|未|没|从未|不曾).{0,12}$", prefix)
+    )
 
 
 class RiskClassifier:
@@ -611,9 +617,99 @@ class RiskClassifier:
         text = description or ""
         signals: list[RiskSignal] = []
 
+        routine = routine_activity(text)
+        fact = policy_fact(text)
+        exclusions = {
+            "authorized_encryption": {"ransomware"},
+            "lost_device_wiped": {"lost_device", "lost_device_at_risk"},
+            "unapproved_public_upload": {"data_exfiltration"},
+            "unconfirmed_popups": {"malware_symptoms"},
+            "hypothetical_information": {"malware_detected", "infected_device"},
+            "authorized_training": {"attachment_executed", "malware_executed"},
+        }.get(fact[1] if fact else "", set())
+        if fact is not None and not (routine and fact[1] == "credentials_submitted"):
+            level, label = fact
+            signals.append(RiskSignal(label, level, label))
+        bilingual = chinese_risk(text)
+        if bilingual is not None and not (routine and bilingual[1] == "credentials_submitted"):
+            level, label = bilingual
+            if label not in exclusions:
+                signals.append(RiskSignal(label, level, label))
+
+        code_match = re.search(
+            r"\b(?:submitted|gave|provided|entered|typed|shared)\b.{0,45}"
+            r"\b(?:mfa\s+code|otp|one-time\s+code|verification\s+code|code)\b",
+            text,
+            re.I,
+        )
+        if (
+            code_match
+            and not routine
+            and not is_negated(text, code_match.start())
+            and re.search(
+                r"fake|phish|caller|verification|mfa|otp|one-time|suspicious|unexpected|attacker",
+                text,
+                re.I,
+            )
+        ):
+            signal = RiskSignal(
+                "credentials_submitted", RiskLevel.HIGH, "verification code disclosed"
+            )
+            signals.append(signal)
+
+        clicked = re.search(r"\bclicked\b.{0,25}\blink\b", text, re.I)
+        if clicked and not is_negated(text, clicked.start()) and not routine:
+            signals.append(RiskSignal("clicked_link", RiskLevel.MEDIUM, "clicked a link"))
+
         for level, label, regex in _COMPILED_RULES:
+            if label in exclusions:
+                continue
+            if routine and label in {
+                "credentials_submitted",
+                "mfa_approved",
+                "malware_executed",
+                "attachment_executed",
+            }:
+                continue
+            if label == "multiple_systems" and not re.search(
+                r"affected|infect|compromis|attack|malware|breach", text, re.I
+            ):
+                continue
+            if label == "malware_executed" and not re.search(
+                r"attachment|macro|installer|invoice|email|script|oddly|suspicious|unexpected|malware|\.exe|installed\s+itself",
+                text,
+                re.I,
+            ):
+                continue
             for match in regex.finditer(text):
                 if is_negated(text, match.start()):
+                    continue
+                if (
+                    fact
+                    and fact[1] == "attachment_blocked_without_execution"
+                    and label in {"malware_detected", "attachment_executed"}
+                    and re.search(r"attachment\b[^.!?;]*\bquarantined\b", match.group(0), re.I)
+                ):
+                    continue
+                if (
+                    label == "credentials_submitted"
+                    and re.match(r"(?:give|fill\s+in)\b", match.group(0), re.I)
+                    and re.search(
+                        r"\b(?:may|can|should)\s+i\b[^.!?;]{0,50}$",
+                        text[max(0, match.start() - 60) : match.start()],
+                        re.I,
+                    )
+                ):
+                    continue
+                if label == "ransomware" and re.search(
+                    r"\b(?:no|not|never)\b.{0,20}\bencrypted\b", match.group(0), re.I
+                ):
+                    continue
+                if label in {"malware_executed", "attachment_executed"} and re.search(
+                    r"\b(?:not|never|no)\b.{0,20}\b(?:executed|ran|opened|running|enabled)\b",
+                    match.group(0),
+                    re.I,
+                ):
                     continue
                 signals.append(
                     RiskSignal(
@@ -624,6 +720,11 @@ class RiskClassifier:
                 )
 
         if not signals:
+            if routine or no_disclosure(text):
+                return RiskAssessment(RiskLevel.LOW, (), "rules", "routine or denied activity")
+            if re.search(r"\bclicked\b.{0,25}\blink\b", text, re.I):
+                signal = RiskSignal("clicked_link", RiskLevel.MEDIUM, "clicked a link")
+                return RiskAssessment(RiskLevel.MEDIUM, (signal,), "rules", "clicked a link")
             return self._fallback_assessment(intent, text)
 
         best_level = min(
@@ -703,7 +804,7 @@ class RiskClassifier:
         try:
             completion = self._client.complete(
                 system_prompt=RISK_SYSTEM_PROMPT,
-                user_prompt=description,
+                user_prompt=redact_credentials(description),
                 context_block="",
                 max_tokens=200,
             )
@@ -722,7 +823,6 @@ class RiskClassifier:
         )
 
     # -- floor ------------------------------------------------------------
-    @staticmethod
     @staticmethod
     def _apply_floor(
         assessment: RiskAssessment,
@@ -748,7 +848,7 @@ class RiskClassifier:
         """
         if history_peak is None or history_peak.rank <= assessment.level.rank:
             return assessment
-        incident_turn = bool(assessment.signals) or intent in INCIDENT_INTENTS
+        incident_turn = assessment.level.rank >= RiskLevel.MEDIUM.rank
         if not incident_turn:
             return assessment
         return dataclasses.replace(

@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "frozen_at": "2026-10-12",
+  "dataset_sha256": "5c187684ac43ed5e5199bfa8e4ea61d1003355b2e0e42966d794f5d6c90097e2",
+  "basis": "Frozen after development baseline and before first validation run. High/critical risk, delivery, RBAC and blocking are hard gates. Annotation and answer support still require independent review.",
+  "metrics": {
+    "intent_accuracy": 0.95,
+    "risk_accuracy": 0.95,
+    "retrieval_recall_at_k": 0.85,
+    "high_risk_delivery_recall": 1.0,
+    "benign_high_false_positive_rate": 0.01,
+    "rbac_violations": 0,
+    "blocking_accuracy": 1.0,
+    "multi_turn_accuracy": 1.0
+  }
+}

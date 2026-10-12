@@ -26,3 +26,7 @@
 
 # Git's own files must keep their exact bytes.
 .gitattributes text eol=lf
+
+# Frozen evaluation identity is a byte hash, not a parsed JSON comparison.
+# Preserve the reviewed v1 bytes on every checkout; never rewrite its labels/hash.
+backend/evaluation/frozen-v1.json -text whitespace=cr-at-eol

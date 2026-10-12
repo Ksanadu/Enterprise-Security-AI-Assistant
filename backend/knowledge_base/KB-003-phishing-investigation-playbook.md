@@ -15,6 +15,12 @@ summary: >-
 
 # Phishing Investigation Playbook
 
+## 中文摘要：安全团队钓鱼调查手册
+
+内部钓鱼邮件调查步骤仅供安全团队使用。关联安全工单，保存原始邮件及时间线，检查邮件头、发件域、链接和附件哈希，并核查凭据提交、邮箱规则和多因素认证变更。
+
+调查后的处置包括封禁攻击基础设施、清除恶意邮件、重置受影响账号凭据、撤销会话和未经授权的邮箱规则。确认账号恢复并记录证据后，按照本手册的关闭条件处理工单。
+
 > **Simulated content.** Fictional sample documentation for a demonstration
 > system. **Internal use only** — restricted to the Security Team.
 

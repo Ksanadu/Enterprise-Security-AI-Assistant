@@ -13,8 +13,10 @@
 [CmdletBinding()]
 param(
     [switch]$Check,
+    [switch]$DemoCheck,
     [int]$FrontendPort = 5173,
     [int]$BackendPort = 8000,
+    [string]$LogDirectory = '',
     [int]$TimeoutSeconds = 90
 )
 
@@ -39,7 +41,7 @@ if (-not (Test-Path (Join-Path $root '.env'))) {
 }
 
 $started = @()
-$logDir = Join-Path $root 'logs'
+$logDir = if ($LogDirectory) { [System.IO.Path]::GetFullPath($LogDirectory) } else { Join-Path $root 'logs' }
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
 
 function Start-AppProcess {
@@ -61,7 +63,7 @@ function Start-AppProcess {
     $stderr = Join-Path $logDir "$LogStem.err.log"
 
     $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments `
-        -WorkingDirectory $WorkingDirectory -PassThru -NoNewWindow `
+        -WorkingDirectory $WorkingDirectory -PassThru -WindowStyle Hidden `
         -RedirectStandardOutput $stdout -RedirectStandardError $stderr
     $script:started += $process
     return $process
@@ -113,6 +115,8 @@ function Wait-ForUrl {
 $frontendUrl = "http://127.0.0.1:$FrontendPort"
 $backendUrl = "http://127.0.0.1:$BackendPort"
 $failures = @()
+$previousProxyTarget = $env:VITE_DEV_PROXY_TARGET
+$env:VITE_DEV_PROXY_TARGET = $backendUrl
 
 try {
     Write-Host ''
@@ -122,7 +126,7 @@ try {
         -FilePath $python -LogStem 'backend' `
         -Arguments @('-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', "$BackendPort") | Out-Null
 
-    if (-not (Wait-ForUrl -Url "$backendUrl/api/v1/health" -Label 'backend')) {
+    if (-not (Wait-ForUrl -Url "$backendUrl/api/v1/ready" -Label 'backend readiness')) {
         $failures += 'backend health'
         Show-LogTail -LogStem 'backend'
     }
@@ -156,6 +160,7 @@ try {
         # [switch]$Check parameter, and assigning a hashtable to it fails with a
         # confusing "Cannot create object of type SwitchParameter" error.
         $probes = @(
+            @{ Label = 'backend readiness';   Url = "$backendUrl/api/v1/ready" },
             @{ Label = 'backend health';      Url = "$backendUrl/api/v1/health" },
             @{ Label = 'SPA document';        Url = "$frontendUrl/" },
             @{ Label = 'proxied API health';  Url = "$frontendUrl/api/v1/health" }
@@ -200,10 +205,16 @@ try {
                 $failures += 'anonymous access status'
             }
         }
+
+        if ($DemoCheck -and $failures.Count -eq 0) {
+            & $python (Join-Path $root 'backend\scripts\demo.py') --base-url $backendUrl --quiet
+            if ($LASTEXITCODE -ne 0) { $failures += 'authenticated demo workflow' }
+        }
     }
 }
 finally {
     Stop-All
+    $env:VITE_DEV_PROXY_TARGET = $previousProxyTarget
 }
 
 Write-Host ''

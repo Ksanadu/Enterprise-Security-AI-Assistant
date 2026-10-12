@@ -26,6 +26,9 @@ import {
   type TicketList,
   type TokenResponse,
   type UserPublic,
+  type WorkflowTask,
+  type NotificationDelivery,
+  type NotificationPage,
 } from './types'
 
 export class ApiError extends Error {
@@ -183,11 +186,11 @@ export const api = {
       apiRequest<ConversationDetail>(`/chat/conversations/${id}`, options),
     deleteConversation: (id: number, options?: RequestOptions) =>
       apiRequest<void>(`/chat/conversations/${id}`, { ...options, method: 'DELETE' }),
-    sendMessage: (id: number, content: string, options?: RequestOptions) =>
+    sendMessage: (id: number, content: string, options?: RequestOptions, requestKey?: string) =>
       apiRequest<PostMessageResult>(`/chat/conversations/${id}/messages`, {
         ...options,
         method: 'POST',
-        body: { content },
+        body: { content, ...(requestKey ? { client_request_id: requestKey } : {}) },
       }),
   },
 
@@ -204,10 +207,14 @@ export const api = {
   },
 
   tickets: {
-    list: (params: { status?: string; severity?: string } = {}, options?: RequestOptions) => {
+    workflows: (offset = 0) => apiRequest<{ tasks: WorkflowTask[]; pending: number; next_offset: number | null }>(`/tickets/workflows?offset=${offset}`),
+    retryWorkflow: (id: string) => apiRequest<WorkflowTask>(`/tickets/workflows/${encodeURIComponent(id)}/retry`, { method: 'POST', body: {} }),
+    list: (params: { status?: string; severity?: string; offset?: number; limit?: number } = {}, options?: RequestOptions) => {
       const query = new URLSearchParams()
       if (params.status) query.set('status', params.status)
       if (params.severity) query.set('severity', params.severity)
+      if (params.offset !== undefined) query.set('offset', String(params.offset))
+      if (params.limit !== undefined) query.set('limit', String(params.limit))
       const suffix = query.toString() ? `?${query.toString()}` : ''
       return apiRequest<TicketList>(`/tickets${suffix}`, options)
     },
@@ -230,11 +237,12 @@ export const api = {
       description: string,
       category: string,
       options?: RequestOptions,
+      messageId?: number,
     ) =>
       apiRequest<TicketDetail>('/tickets', {
         ...options,
         method: 'POST',
-        body: { title, description, category },
+        body: { title, description, category, ...(messageId ? { message_id: messageId } : {}) },
       }),
   },
 
@@ -261,5 +269,9 @@ export const api = {
     },
     auditActions: (options?: RequestOptions) =>
       apiRequest<{ actions: string[] }>('/dashboard/audit/actions', options),
+  },
+  operations: {
+    notifications: (offset = 0, options?: RequestOptions) => apiRequest<NotificationPage>(`/operations/notifications?offset=${offset}&limit=50`, options),
+    retryNotification: (id: string, options?: RequestOptions) => apiRequest<NotificationDelivery>(`/operations/notifications/${encodeURIComponent(id)}/retry`, { ...options, method: 'POST', body: {} }),
   },
 }

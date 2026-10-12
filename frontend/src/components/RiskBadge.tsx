@@ -6,6 +6,8 @@ export interface RiskBadgeProps {
   intent: string | null
   signals: RiskSignal[]
   escalation: boolean
+  submitted?: boolean
+  pending?: boolean
 }
 
 /**
@@ -15,7 +17,7 @@ export interface RiskBadgeProps {
  * not make one, and it never shows a control that would let the user argue with
  * the risk level.
  */
-export function RiskBadge({ level, intent, signals, escalation }: RiskBadgeProps) {
+export function RiskBadge({ level, intent, signals, escalation, submitted = false, pending = false }: RiskBadgeProps) {
   return (
     <section className="assessment" aria-label="Assessment">
       <div className="assessment__row">
@@ -27,8 +29,11 @@ export function RiskBadge({ level, intent, signals, escalation }: RiskBadgeProps
 
       {escalation && (
         <p className="assessment__escalation" role="status">
-          This has been flagged for the security team. A person will review it — the assistant
-          cannot close an event at this risk level on its own.
+          {pending
+            ? 'Human review is required. The report is saved; ticket submission is pending retry. Contact the security team directly if urgent.'
+            : submitted
+              ? 'Human review is required. The ticket is submitted to the security queue; this does not confirm that a person has accepted it.'
+              : 'Human review is required. Contact the security team; ticket submission has not been confirmed.'}
         </p>
       )}
 

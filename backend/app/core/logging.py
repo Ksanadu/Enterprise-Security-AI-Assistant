@@ -71,7 +71,7 @@ class TextFormatter(logging.Formatter):
     """Human-readable single-line format including the request id."""
 
     def format(self, record: logging.LogRecord) -> str:
-        record.request_id = request_id_var.get()
+        record.request_id = getattr(record, "request_id", request_id_var.get())
         return super().format(record)
 
 
@@ -90,7 +90,7 @@ class JsonFormatter(logging.Formatter):
             "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
             "level": record.levelname,
             "logger": record.name,
-            "request_id": request_id_var.get(),
+            "request_id": getattr(record, "request_id", request_id_var.get()),
             "message": record.getMessage(),
         }
         for key, value in record.__dict__.items():

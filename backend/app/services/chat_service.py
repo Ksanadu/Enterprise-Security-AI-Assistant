@@ -19,7 +19,7 @@ import datetime as dt
 import logging
 import re
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select, true, update
 from sqlalchemy.orm import Session
 
 from app.ai.incident_shape import detect_incident_shape
@@ -31,13 +31,15 @@ from app.ai.turn_analysis import TurnAnalysis
 from app.core.config import Settings
 from app.core.enums import AuditOutcome, Intent, MessageRole, RiskLevel, Role
 from app.core.errors import AppError, NotFoundError, ValidationError
-from app.db.models import Conversation, Message, Ticket, User
+from app.core.text_analysis import resolve_credential_followup
+from app.db.models import ChatRequest, Conversation, Message, Ticket, User, WorkflowTask
 from app.rag.embeddings import tokenize
 from app.rag.retriever import RetrievalResult
 from app.security.audit import AuditAction, record_audit
 from app.security.redaction import redact_credentials
 from app.services.knowledge_service import KnowledgeService, KnowledgeUnavailableError
 from app.services.workflow_manager import WorkflowDecision, WorkflowManager
+from app.services.workflow_tasks import WorkflowTasks
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +134,7 @@ class ChatService:
         self._intent_classifier = intent_classifier or IntentClassifier(settings)
         self._risk_classifier = risk_classifier or RiskClassifier(settings)
         self._workflow = workflow or WorkflowManager()
+        self.workflow_tasks = WorkflowTasks(self._workflow)
 
     # -- introspection ----------------------------------------------------
     def describe_pipeline(self) -> dict[str, object]:
@@ -224,7 +227,24 @@ class ChatService:
         conversation = self.get_owned_conversation(
             session, user=user, conversation_id=conversation_id
         )
-        session.delete(conversation)
+        from app.services.retention import (
+            conversation_tickets,
+            erase_conversation,
+            held,
+            ticket_preserved,
+        )
+
+        protected = session.scalar(
+            select(Conversation.id).where(
+                Conversation.id == conversation.id,
+                or_(
+                    held("conversation", Conversation.id), conversation_tickets(ticket_preserved())
+                ),
+            )
+        )
+        if protected is not None:
+            raise ValidationError("This conversation is subject to a preservation hold.")
+        erase_conversation(session, conversation.id, dt.datetime.now(dt.UTC))
         logger.info("conversation_deleted id=%s user_id=%s", conversation_id, user.id)
 
     # -- messages ---------------------------------------------------------
@@ -237,20 +257,47 @@ class ChatService:
             ).all()
         )
 
-    def _recent_user_turns(self, session: Session, conversation: Conversation) -> list[str]:
+    def _recent_user_turns(
+        self, session: Session, conversation: Conversation, before_id: int | None = None
+    ) -> list[str]:
         rows = session.scalars(
             select(Message)
             .where(
                 Message.conversation_id == conversation.id,
                 Message.role == MessageRole.USER,
+                Message.id < before_id if before_id is not None else true(),
             )
             .order_by(Message.id.desc())
             .limit(QUERY_CONTEXT_TURNS)
         ).all()
         return [row.content for row in reversed(rows)]
 
+    def _pending_clarification(
+        self, session: Session, conversation: Conversation, before_id: int | None = None
+    ) -> dict[str, str] | None:
+        # State is persisted with the assistant message, so a restart or another
+        # browser does not lose the unanswered question. Unrelated turns preserve it.
+        previous = session.scalar(
+            select(Message)
+            .where(
+                Message.conversation_id == conversation.id,
+                Message.role == MessageRole.ASSISTANT,
+                Message.id < before_id if before_id is not None else true(),
+            )
+            .order_by(Message.id.desc())
+            .limit(1)
+        )
+        state = (previous.payload or {}).get("clarification_state") if previous else None
+        return state if isinstance(state, dict) and state.get("status") == "pending" else None
+
     def post_message(
-        self, session: Session, *, user: User, conversation: Conversation, content: str
+        self,
+        session: Session,
+        *,
+        user: User,
+        conversation: Conversation,
+        content: str,
+        request_record: ChatRequest | None = None,
     ) -> tuple[Message, Message, GeneratedAnswer, TurnAnalysis]:
         """Record the user's message and produce the assistant's reply.
 
@@ -269,23 +316,50 @@ class ChatService:
                 f"Message exceeds the maximum length of {self._settings.max_query_length} "
                 "characters."
             )
-        if not self._knowledge.is_ready():
-            raise KnowledgeUnavailableError()
-
         # A user reporting an incident may paste the credential they just lost
         # control of. Classification, retrieval and risk assessment below all run
         # on the raw text, because the wording is the signal. Nothing *persisted*
         # keeps the plaintext: this is the same rule the ticket body already
         # follows, applied to the message row and the title derived from it.
         stored_content = redact_credentials(question)
+        active = session.scalar(
+            update(Conversation)
+            .where(
+                Conversation.id == conversation.id,
+                Conversation.user_id == user.id,
+                Conversation.purged_at.is_(None),
+            )
+            .values(updated_at=dt.datetime.now(dt.UTC))
+            .returning(Conversation.id)
+        )
+        if active is None:
+            raise NotFoundError("Conversation not found.")
+        existing_message = (
+            session.get(Message, request_record.user_message_id)
+            if request_record and request_record.user_message_id
+            else None
+        )
+        history = (
+            self._recent_user_turns(session, conversation, before_id=existing_message.id)
+            if existing_message
+            else self._recent_user_turns(session, conversation)
+        )
+        pending = self._pending_clarification(
+            session, conversation, before_id=existing_message.id if existing_message else None
+        )
+        assessed_question, clarification_status = question, "pending"
+        if pending and pending.get("kind") == "phishing_credentials":
+            assessed_question, clarification_status = resolve_credential_followup(question)
 
-        user_message = Message(
+        user_message = existing_message or Message(
             conversation_id=conversation.id,
             role=MessageRole.USER,
             content=stored_content,
         )
         session.add(user_message)
         session.flush()
+        if request_record is not None:
+            request_record.user_message_id = user_message.id
 
         # 1. Guard. A request that tries to rewrite the assistant's rules, extract
         #    its configuration or bypass access control never reaches the model.
@@ -305,12 +379,46 @@ class ChatService:
         #    topical signal on its own, so it is classified with the same
         #    conversation context retrieval uses. Without this it lands in
         #    "out of scope" and the follow-up loses the subject it was about.
-        history = self._recent_user_turns(session, conversation)
         classification_text = (
-            build_retrieval_query(history, question, max_chars=self._settings.max_query_length)
-            if needs_conversation_context(question)
-            else question
+            build_retrieval_query(
+                history, assessed_question, max_chars=self._settings.max_query_length
+            )
+            if needs_conversation_context(assessed_question)
+            else assessed_question
         )
+        # Record facts and apply deterministic safety rules before any external
+        # model call. Incident work and the user turn survive a slow/down model.
+        history_peak = RiskLevel(conversation.peak_risk_level)
+        early_intent = self._intent_classifier.classify_with_rules(classification_text)
+        early_risk = self._risk_classifier._apply_floor(
+            self._risk_classifier.assess_with_rules(assessed_question, intent=early_intent.intent),
+            history_peak,
+            intent=early_intent.intent,
+        )
+        early_analysis = TurnAnalysis(
+            early_intent.intent,
+            early_intent.confidence,
+            early_intent.source,
+            early_risk,
+            guard_result,
+            highest_level([history_peak, early_risk.level]),
+        )
+        self._maybe_title_conversation(conversation, stored_content)
+        early_peak = self._raise_peak(session, conversation, early_analysis.peak_risk)
+        early_risk = self._risk_classifier._apply_floor(
+            early_risk, early_peak, intent=early_intent.intent
+        )
+        early_analysis = dataclasses.replace(early_analysis, risk=early_risk, peak_risk=early_peak)
+        session.commit()
+        early_ticket, early_decision, early_task = self._apply_workflow(
+            session,
+            analysis=early_analysis,
+            user=user,
+            conversation=conversation,
+            question=question,
+            user_message_id=user_message.id,
+        )
+        session.commit()
         intent = self._intent_classifier.classify(classification_text)
 
         # 3. Retrieval, already filtered to what this role may read.
@@ -325,24 +433,31 @@ class ChatService:
         # rule set cannot classify every way a breach is described, and a report the
         # classifier missed is not an off-topic question - it is the one case where
         # saying "I have no document for this" is the wrong answer twice over.
-        if intent.intent is Intent.OUT_OF_SCOPE and detect_incident_shape(question) is None:
+        if not self._knowledge.is_ready() or (
+            intent.intent is Intent.OUT_OF_SCOPE and detect_incident_shape(question) is None
+        ):
             retrieval = self._empty_retrieval(question, user.role)
             logger.info("retrieval_skipped reason=out_of_scope")
         else:
             if intent.intent is Intent.OUT_OF_SCOPE:
                 logger.info("retrieval_forced reason=incident_shape")
-            retrieval = self._retrieve(question=question, history=history, role=user.role)
+            try:
+                retrieval = self._retrieve(
+                    question=assessed_question, history=history, role=user.role
+                )
+            except AppError:
+                retrieval = self._empty_retrieval(question, user.role)
 
         # 4. Grounded answer generation.
         generated = self._generator.generate(question=question, role=user.role, retrieval=retrieval)
 
         # 5. Risk, then the escalation decision - both in backend code.
-        history_peak = RiskLevel(conversation.peak_risk_level)
         risk = self._risk_classifier.assess(
-            question, intent=intent.intent, history_peak=history_peak
+            assessed_question, intent=intent.intent, history_peak=history_peak
         )
         peak = highest_level([history_peak, risk.level])
-        conversation.peak_risk_level = peak.value
+        peak = self._raise_peak(session, conversation, peak)
+        risk = self._risk_classifier._apply_floor(risk, peak, intent=intent.intent)
 
         analysis = TurnAnalysis(
             intent=intent.intent,
@@ -358,19 +473,37 @@ class ChatService:
         # 6. Workflow decision: does this need a ticket, and does it need a person?
         #    The ticket side is performed here so the assistant's answer can name
         #    the reference it just created.
-        ticket, decision = self._apply_workflow(
-            session,
-            analysis=analysis,
-            user=user,
-            conversation=conversation,
-            question=question,
-        )
+        if risk.level.rank <= early_risk.level.rank:
+            ticket, decision, task = early_ticket, early_decision, early_task
+        else:
+            ticket, decision, task = self._apply_workflow(
+                session,
+                analysis=analysis,
+                user=user,
+                conversation=conversation,
+                question=question,
+                user_message_id=user_message.id,
+            )
+        if pending and clarification_status == "ambiguous":
+            decision = dataclasses.replace(
+                decision,
+                clarifying_question=(
+                    "Please clarify: did you submit a password or verification code, "
+                    "or did you only open the link? / 请确认：提交了密码或验证码，还是只打开了链接？"
+                ),
+            )
         analysis = dataclasses.replace(
             analysis,
             ticket_reference=ticket.reference if ticket is not None else None,
             ticket_status=ticket.status.value if ticket is not None else None,
             workflow_action=decision.action,
             clarifying_question=decision.clarifying_question or None,
+            workflow_status="pending"
+            if task and task.status != "completed"
+            else "submitted"
+            if ticket
+            else "not_required",
+            workflow_task_id=task.id if task else None,
         )
 
         # The medium-risk tier answers by asking. The question belongs in the
@@ -381,11 +514,23 @@ class ChatService:
                 generated, answer=f"{generated.answer}\n\n{decision.clarifying_question}"
             )
 
+        stored_payload = self._build_payload(generated, analysis)
+        stored_payload["reply_to_message_id"] = user_message.id
+        if decision.clarifying_question and intent.intent is Intent.PHISHING:
+            stored_payload["clarification_state"] = {
+                "kind": "phishing_credentials",
+                "status": "pending",
+            }
+        elif pending:
+            stored_payload["clarification_state"] = {
+                **pending,
+                "status": "resolved" if clarification_status == "resolved" else "pending",
+            }
         assistant_message = Message(
             conversation_id=conversation.id,
             role=MessageRole.ASSISTANT,
             content=generated.answer,
-            payload=self._build_payload(generated, analysis),
+            payload=stored_payload,
             source_document_ids=generated.cited_document_ids,
             # Denormalised for dashboard aggregation; the payload stays the full record.
             intent=analysis.intent.value,
@@ -451,13 +596,13 @@ class ChatService:
         )
 
         history_peak = RiskLevel(conversation.peak_risk_level)
-        assessed = self._risk_classifier.assess(question, intent=Intent.OUT_OF_SCOPE)
+        assessed = self._risk_classifier.assess_with_rules(question, intent=Intent.OUT_OF_SCOPE)
         # The refusal itself is never *below* medium - an injection attempt is a
         # reportable event - but a real incident inside the refused text raises it.
         level = highest_level([RiskLevel.MEDIUM, assessed.level])
         risk = dataclasses.replace(assessed, level=level)
         peak = highest_level([history_peak, level])
-        conversation.peak_risk_level = peak.value
+        self._raise_peak(session, conversation, peak)
 
         analysis = TurnAnalysis(
             intent=Intent.OUT_OF_SCOPE,
@@ -468,18 +613,26 @@ class ChatService:
             peak_risk=peak,
             blocked=True,
         )
-        ticket, decision = self._apply_workflow(
+        session.commit()
+        ticket, decision, task = self._apply_workflow(
             session,
             analysis=analysis,
             user=user,
             conversation=conversation,
             question=question,
+            user_message_id=user_message.id,
         )
         analysis = dataclasses.replace(
             analysis,
             ticket_reference=ticket.reference if ticket is not None else None,
             ticket_status=ticket.status.value if ticket is not None else None,
             workflow_action=decision.action,
+            workflow_status="pending"
+            if task and task.status != "completed"
+            else "submitted"
+            if ticket
+            else "not_required",
+            workflow_task_id=task.id if task else None,
         )
 
         assistant_message = Message(
@@ -501,7 +654,11 @@ class ChatService:
                 "intent_source": "guard",
                 "risk_level": risk.level.value,
                 "risk_signals": [
-                    {"label": signal.label, "level": signal.level.value, "evidence": signal.evidence}
+                    {
+                        "label": signal.label,
+                        "level": signal.level.value,
+                        "evidence": signal.evidence,
+                    }
                     for signal in risk.signals
                 ],
                 "risk_reason": risk.reason,
@@ -517,6 +674,11 @@ class ChatService:
                 "ticket_status": analysis.ticket_status,
                 "workflow_action": decision.action,
                 "clarifying_question": None,
+                "clarification_state": None,
+                "workflow_status": analysis.workflow_status,
+                "workflow_task_id": analysis.workflow_task_id,
+                "ticket_created": ticket is not None,
+                "reply_to_message_id": user_message.id,
             },
             source_document_ids=[],
             intent=Intent.OUT_OF_SCOPE.value,
@@ -550,7 +712,8 @@ class ChatService:
         user: User,
         conversation: Conversation,
         question: str,
-    ) -> tuple[Ticket | None, WorkflowDecision]:
+        user_message_id: int,
+    ) -> tuple[Ticket | None, WorkflowDecision, WorkflowTask | None]:
         """Run the workflow decision and perform it.
 
         Returns the affected ticket (or ``None``) *and* the decision, so the
@@ -570,34 +733,27 @@ class ChatService:
             decision.reason,
             analysis.risk.level.value,
         )
-        try:
-            return (
-                self._workflow.apply(
-                    session,
-                    decision=decision,
-                    user=user,
-                    analysis=analysis,
-                    conversation_id=conversation.id,
-                    question=question,
-                    existing_ticket=existing,
-                ),
-                decision,
+        if decision.action in {"create", "clarify", "escalate"}:
+            task = self.workflow_tasks.prepare(
+                session,
+                decision=decision,
+                analysis=analysis,
+                user=user,
+                conversation_id=conversation.id,
+                user_message_id=user_message_id,
+                question=question,
             )
-        except Exception:
-            # The answer has already been generated and is still worth delivering.
-            # A ticket that could not be filed is an operational problem, not a
-            # reason to lose the user's incident report on the floor - so this is
-            # recorded loudly and the turn continues without a reference.
-            logger.exception(
-                "workflow_apply_failed conversation_id=%s action=%s risk=%s",
-                conversation.id,
-                decision.action,
-                analysis.risk.level.value,
-            )
-            self._record_workflow_failure(
-                session, conversation_id=conversation.id, user=user, decision=decision
-            )
-            return None, decision
+            return self.workflow_tasks.run(session, task), decision, task
+        ticket = self._workflow.apply(
+            session,
+            decision=decision,
+            user=user,
+            analysis=analysis,
+            conversation_id=conversation.id,
+            question=question,
+            existing_ticket=existing,
+        )
+        return ticket, decision, None
 
     def _record_workflow_failure(
         self,
@@ -651,6 +807,7 @@ class ChatService:
             "recommended_actions": generated.recommended_actions,
             "source_documents": generated.source_documents,
             "grounded": generated.grounded,
+            "grounding_status": generated.grounding_status,
             "provider": generated.provider,
             "model": generated.model,
             "offline": generated.offline,
@@ -674,6 +831,9 @@ class ChatService:
             "ticket_status": analysis.ticket_status,
             "workflow_action": analysis.workflow_action,
             "clarifying_question": analysis.clarifying_question,
+            "workflow_status": analysis.workflow_status,
+            "workflow_task_id": analysis.workflow_task_id,
+            "ticket_created": analysis.ticket_reference is not None,
         }
 
     def _empty_retrieval(self, query: str, role: Role) -> RetrievalResult:
@@ -725,3 +885,19 @@ class ChatService:
         if len(title) > MAX_TITLE_CHARS:
             title = title[: MAX_TITLE_CHARS - 1].rstrip() + "…"
         conversation.title = title or DEFAULT_CONVERSATION_TITLE
+
+    @staticmethod
+    def _raise_peak(session: Session, conversation: Conversation, level: RiskLevel) -> RiskLevel:
+        session.flush()
+        current_rank = case(
+            *[(Conversation.peak_risk_level == item.value, item.rank) for item in RiskLevel],
+            else_=0,
+        )
+        session.execute(
+            update(Conversation)
+            .where(Conversation.id == conversation.id, current_rank < level.rank)
+            .values(peak_risk_level=level.value),
+            execution_options={"synchronize_session": False},
+        )
+        session.refresh(conversation)
+        return RiskLevel(conversation.peak_risk_level)

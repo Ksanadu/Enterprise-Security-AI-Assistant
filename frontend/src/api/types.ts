@@ -113,6 +113,7 @@ export interface MessagePayload {
   recommended_actions: string[]
   source_documents: SourceDocument[]
   grounded: boolean
+  grounding_status?: string
   provider: string
   model: string
   offline: boolean
@@ -145,6 +146,11 @@ export interface MessagePayload {
   workflow_action: WorkflowAction
   /** The question asked instead of filing, on the medium-risk tier. */
   clarifying_question: string | null
+  workflow_status?: 'pending' | 'submitted' | 'not_required'
+  workflow_task_id?: string | null
+  ticket_created?: boolean
+  requested_ticket_reference?: string | null
+  reply_to_message_id?: number | null
 }
 
 export type WorkflowAction = 'none' | 'create' | 'escalate' | 'suggest' | 'clarify'
@@ -186,6 +192,7 @@ export interface TicketDetail extends TicketSummary {
   /** Whether the server would accept a status change from this caller. */
   can_update: boolean
   events: TicketEvent[]
+  human_acknowledged?: boolean
 }
 
 export interface TicketStatistics {
@@ -201,6 +208,17 @@ export interface TicketList {
   count: number
   statistics: TicketStatistics
   tickets: TicketSummary[]
+  next_offset?: number | null
+}
+
+export interface WorkflowTask {
+  id: string
+  status: string
+  attempts: number
+  risk_level: RiskLevel
+  ticket_reference: string | null
+  error_code: string | null
+  created_at: string
 }
 
 /* ------------------------------------------------------------- dashboard -- */
@@ -323,6 +341,7 @@ export interface PostMessageResult {
 }
 
 export interface ChatCapabilities {
+  demo_enabled?: boolean
   role: Role
   role_label: string
   scope_description: string
@@ -341,4 +360,24 @@ export function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
   if (typeof candidate !== 'object' || candidate === null) return false
   const body = candidate as Partial<ApiErrorBody>
   return typeof body.code === 'string' && typeof body.message === 'string'
+}
+
+export interface NotificationDelivery {
+  id: string
+  ticket_reference: string
+  kind: 'incident' | 'ack_timeout'
+  severity: string
+  status: 'pending' | 'processing' | 'delivered' | 'exhausted' | 'cancelled'
+  attempts: number
+  error_code: string | null
+  next_attempt_at: string | null
+  created_at: string | null
+  delivered_at: string | null
+}
+
+export interface NotificationPage {
+  notifications: NotificationDelivery[]
+  total: number
+  next_offset: number | null
+  receiver_configured: boolean
 }

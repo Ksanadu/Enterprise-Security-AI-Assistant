@@ -1,0 +1,1154 @@
+{
+  "audit_logs": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 1,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "actor_user_id": {
+        "type": "INTEGER",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "actor_email": {
+        "type": "VARCHAR(255)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "actor_role": {
+        "type": "VARCHAR(32)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "action": {
+        "type": "VARCHAR(64)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "resource_type": {
+        "type": "VARCHAR(64)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "resource_id": {
+        "type": "VARCHAR(64)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "outcome": {
+        "type": "VARCHAR(16)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "request_id": {
+        "type": "VARCHAR(64)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "ip_address": {
+        "type": "VARCHAR(64)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "detail": {
+        "type": "JSON",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      }
+    },
+    "indexes": [
+      {
+        "column_names": [
+          "action"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "actor_role"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "actor_user_id"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "created_at",
+          "action"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "created_at"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "request_id"
+        ],
+        "unique": 0
+      }
+    ],
+    "unique": [],
+    "foreign_keys": [
+      {
+        "constrained_columns": [
+          "actor_user_id"
+        ],
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "SET NULL"
+        }
+      }
+    ]
+  },
+  "chat_requests": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 1,
+        "default": null
+      },
+      "user_id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "conversation_id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "request_key": {
+        "type": "VARCHAR(128)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "question_hash": {
+        "type": "VARCHAR(64)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "actor_role": {
+        "type": "VARCHAR(32)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "pending_content": {
+        "type": "TEXT",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "lease_until": {
+        "type": "DATETIME",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "user_message_id": {
+        "type": "INTEGER",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "response": {
+        "type": "JSON",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    },
+    "indexes": [
+      {
+        "column_names": [
+          "created_at"
+        ],
+        "unique": 0
+      }
+    ],
+    "unique": [
+      {
+        "column_names": [
+          "user_id",
+          "conversation_id",
+          "request_key"
+        ]
+      }
+    ],
+    "foreign_keys": [
+      {
+        "constrained_columns": [
+          "conversation_id"
+        ],
+        "referred_table": "conversations",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        }
+      },
+      {
+        "constrained_columns": [
+          "user_id"
+        ],
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        }
+      },
+      {
+        "constrained_columns": [
+          "user_message_id"
+        ],
+        "referred_table": "messages",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "SET NULL"
+        }
+      }
+    ]
+  },
+  "conversations": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 1,
+        "default": null
+      },
+      "user_id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "title": {
+        "type": "VARCHAR(200)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "peak_risk_level": {
+        "type": "VARCHAR(16)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    },
+    "indexes": [
+      {
+        "column_names": [
+          "created_at"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "user_id"
+        ],
+        "unique": 0
+      }
+    ],
+    "unique": [],
+    "foreign_keys": [
+      {
+        "constrained_columns": [
+          "user_id"
+        ],
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        }
+      }
+    ]
+  },
+  "manual_ticket_links": {
+    "columns": {
+      "message_id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 1,
+        "default": null
+      },
+      "ticket_id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      }
+    },
+    "indexes": [],
+    "unique": [],
+    "foreign_keys": [
+      {
+        "constrained_columns": [
+          "message_id"
+        ],
+        "referred_table": "messages",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        }
+      },
+      {
+        "constrained_columns": [
+          "ticket_id"
+        ],
+        "referred_table": "tickets",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        }
+      }
+    ]
+  },
+  "messages": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 1,
+        "default": null
+      },
+      "conversation_id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "role": {
+        "type": "VARCHAR(16)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "content": {
+        "type": "TEXT",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "payload": {
+        "type": "JSON",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "source_document_ids": {
+        "type": "JSON",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "intent": {
+        "type": "VARCHAR(32)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "risk_level": {
+        "type": "VARCHAR(16)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "escalated": {
+        "type": "BOOLEAN",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    },
+    "indexes": [
+      {
+        "column_names": [
+          "conversation_id"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "created_at"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "intent",
+          "risk_level"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "intent"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "risk_level"
+        ],
+        "unique": 0
+      }
+    ],
+    "unique": [],
+    "foreign_keys": [
+      {
+        "constrained_columns": [
+          "conversation_id"
+        ],
+        "referred_table": "conversations",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        }
+      }
+    ]
+  },
+  "ticket_events": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 1,
+        "default": null
+      },
+      "ticket_id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "event_type": {
+        "type": "VARCHAR(32)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "from_status": {
+        "type": "VARCHAR(16)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "to_status": {
+        "type": "VARCHAR(16)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "from_severity": {
+        "type": "VARCHAR(16)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "to_severity": {
+        "type": "VARCHAR(16)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "actor_user_id": {
+        "type": "INTEGER",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "actor_role": {
+        "type": "VARCHAR(32)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "automated": {
+        "type": "BOOLEAN",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "note": {
+        "type": "TEXT",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      }
+    },
+    "indexes": [
+      {
+        "column_names": [
+          "actor_user_id"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "event_type"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "ticket_id",
+          "created_at"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "ticket_id"
+        ],
+        "unique": 0
+      }
+    ],
+    "unique": [],
+    "foreign_keys": [
+      {
+        "constrained_columns": [
+          "actor_user_id"
+        ],
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "SET NULL"
+        }
+      },
+      {
+        "constrained_columns": [
+          "ticket_id"
+        ],
+        "referred_table": "tickets",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        }
+      }
+    ]
+  },
+  "ticket_sequences": {
+    "columns": {
+      "key": {
+        "type": "VARCHAR(32)",
+        "nullable": false,
+        "primary_key": 1,
+        "default": null
+      },
+      "value": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      }
+    },
+    "indexes": [],
+    "unique": [],
+    "foreign_keys": []
+  },
+  "tickets": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 1,
+        "default": null
+      },
+      "reference": {
+        "type": "VARCHAR(32)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "title": {
+        "type": "VARCHAR(200)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "description": {
+        "type": "TEXT",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "category": {
+        "type": "VARCHAR(64)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "severity": {
+        "type": "VARCHAR(16)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "status": {
+        "type": "VARCHAR(16)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "source": {
+        "type": "VARCHAR(16)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "escalation_required": {
+        "type": "BOOLEAN",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "created_by_user_id": {
+        "type": "INTEGER",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "owner_role": {
+        "type": "VARCHAR(32)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "conversation_id": {
+        "type": "INTEGER",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "related_query": {
+        "type": "TEXT",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    },
+    "indexes": [
+      {
+        "column_names": [
+          "conversation_id"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "created_at"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "created_by_user_id"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "owner_role"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "reference"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "severity"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "status",
+          "severity"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "status"
+        ],
+        "unique": 0
+      }
+    ],
+    "unique": [
+      {
+        "column_names": [
+          "reference"
+        ]
+      }
+    ],
+    "foreign_keys": [
+      {
+        "constrained_columns": [
+          "conversation_id"
+        ],
+        "referred_table": "conversations",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "SET NULL"
+        }
+      },
+      {
+        "constrained_columns": [
+          "created_by_user_id"
+        ],
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "SET NULL"
+        }
+      }
+    ]
+  },
+  "user_sessions": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 1,
+        "default": null
+      },
+      "jti": {
+        "type": "VARCHAR(64)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "user_id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "expires_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "revoked_at": {
+        "type": "DATETIME",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "revoked_reason": {
+        "type": "VARCHAR(64)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "ip_address": {
+        "type": "VARCHAR(64)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "user_agent": {
+        "type": "VARCHAR(255)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      }
+    },
+    "indexes": [
+      {
+        "column_names": [
+          "expires_at"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "jti"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "user_id",
+          "revoked_at"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "user_id"
+        ],
+        "unique": 0
+      }
+    ],
+    "unique": [
+      {
+        "column_names": [
+          "jti"
+        ]
+      }
+    ],
+    "foreign_keys": [
+      {
+        "constrained_columns": [
+          "user_id"
+        ],
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        }
+      }
+    ]
+  },
+  "users": {
+    "columns": {
+      "id": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 1,
+        "default": null
+      },
+      "email": {
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "full_name": {
+        "type": "VARCHAR(160)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "role": {
+        "type": "VARCHAR(32)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "password_hash": {
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "is_active": {
+        "type": "BOOLEAN",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "last_login_at": {
+        "type": "DATETIME",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    },
+    "indexes": [
+      {
+        "column_names": [
+          "created_at"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "email"
+        ],
+        "unique": 1
+      },
+      {
+        "column_names": [
+          "role"
+        ],
+        "unique": 0
+      }
+    ],
+    "unique": [],
+    "foreign_keys": []
+  },
+  "workflow_tasks": {
+    "columns": {
+      "id": {
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "primary_key": 1,
+        "default": null
+      },
+      "user_message_id": {
+        "type": "INTEGER",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "conversation_id": {
+        "type": "INTEGER",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "created_by_user_id": {
+        "type": "INTEGER",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "status": {
+        "type": "VARCHAR(16)",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "attempts": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "revision": {
+        "type": "INTEGER",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "lease_until": {
+        "type": "DATETIME",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "snapshot": {
+        "type": "JSON",
+        "nullable": false,
+        "primary_key": 0,
+        "default": null
+      },
+      "ticket_reference": {
+        "type": "VARCHAR(32)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "error_code": {
+        "type": "VARCHAR(64)",
+        "nullable": true,
+        "primary_key": 0,
+        "default": null
+      },
+      "created_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      "updated_at": {
+        "type": "DATETIME",
+        "nullable": false,
+        "primary_key": 0,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    },
+    "indexes": [
+      {
+        "column_names": [
+          "conversation_id"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "created_at"
+        ],
+        "unique": 0
+      },
+      {
+        "column_names": [
+          "status"
+        ],
+        "unique": 0
+      }
+    ],
+    "unique": [
+      {
+        "column_names": [
+          "user_message_id"
+        ]
+      }
+    ],
+    "foreign_keys": [
+      {
+        "constrained_columns": [
+          "conversation_id"
+        ],
+        "referred_table": "conversations",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "SET NULL"
+        }
+      },
+      {
+        "constrained_columns": [
+          "created_by_user_id"
+        ],
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "SET NULL"
+        }
+      },
+      {
+        "constrained_columns": [
+          "user_message_id"
+        ],
+        "referred_table": "messages",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "SET NULL"
+        }
+      }
+    ]
+  }
+}

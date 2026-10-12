@@ -28,8 +28,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from app.ai.model_budget import provider_post
 from app.core.config import Settings, get_settings
 from app.core.errors import ConfigurationError, UpstreamServiceError
+from app.core.text_analysis import cjk_terms
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +90,7 @@ _FRAGMENT_TAIL = re.compile(
     r"\b(?:or|and|but|the|a|an|of|to|with|for|in|on|by|is|are|as|at|from|that|which)$", re.I
 )
 #: Characters a complete statement may end with.
-_TERMINAL_CHARS = frozenset(".;:!?)]}\"'`")
+_TERMINAL_CHARS = frozenset(".;:!?)]}\"'`。！？")
 _CONTINUATION_START = re.compile(r"^(?:and|or|but|which|that|then|also|including)\b", re.I)
 
 
@@ -259,7 +261,7 @@ def _keywords(text: str) -> set[str]:
         "怎么",
         "什么",
     }
-    return {word for word in words if word not in stop}
+    return {word for word in words if word not in stop} | set(cjk_terms(text))
 
 
 class MockLLMClient:
@@ -420,7 +422,6 @@ class OpenAICompatibleLLMClient:
         context_block: str,
         max_tokens: int = 900,
     ) -> LLMResponse:
-        import httpx
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -443,11 +444,12 @@ class OpenAICompatibleLLMClient:
         last_error: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:
-                response = httpx.post(
+                response = provider_post(
                     f"{self._base_url}/chat/completions",
                     json=payload,
                     headers=headers,
                     timeout=self._timeout,
+                    output_tokens=max_tokens,
                 )
                 response.raise_for_status()
                 body = response.json()
