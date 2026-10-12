@@ -940,6 +940,8 @@ class TestOneCommandLauncher:
             ],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             check=False,
             cwd=str(cwd),
@@ -1356,7 +1358,7 @@ class TestBackendDockerfile:
     ) -> None:
         healthchecks = _find(stages[-1], "HEALTHCHECK")
         assert healthchecks, "no HEALTHCHECK"
-        assert "/api/v1/health" in " ".join(healthchecks)
+        assert "/api/v1/ready" in " ".join(healthchecks)
 
     def test_has_an_exec_form_command(self, stages: list[list[str]]) -> None:
         commands = _find(stages[-1], "CMD")

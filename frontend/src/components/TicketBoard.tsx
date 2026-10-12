@@ -22,6 +22,8 @@ export interface TicketBoardProps {
   onClose: () => void
   onChangeStatus: (status: TicketStatus, note: string) => void
   onAddNote: (note: string) => void
+  onRefresh?: () => void
+  onLoadMore?: () => void
 }
 
 function formatTimestamp(value: string | null): string {
@@ -41,12 +43,15 @@ export function TicketBoard({
   onClose,
   onChangeStatus,
   onAddNote,
+  onRefresh,
+  onLoadMore,
 }: TicketBoardProps) {
   return (
     <div className="tickets">
       <section className="tickets__list" aria-label="Tickets">
         <header className="tickets__header">
           <h2 className="tickets__title">Tickets</h2>
+          <button className="button button--ghost" onClick={onRefresh} disabled={loading}>Refresh</button>
           <label className="tickets__filter">
             <span className="tickets__filter-label">Status</span>
             <select
@@ -117,6 +122,7 @@ export function TicketBoard({
             </li>
           ))}
         </ul>
+        {listing?.next_offset != null && <button className="button button--ghost" onClick={onLoadMore} disabled={loading}>Load more tickets</button>}
       </section>
 
       <section className="tickets__detail" aria-label="Ticket detail">
@@ -181,6 +187,10 @@ function TicketDetailPanel({
           </dd>
         </div>
         <div>
+          <dt>Human response</dt>
+          <dd>{ticket.human_acknowledged ? 'Accepted by a person' : 'Awaiting acknowledgment'}</dd>
+        </div>
+        <div>
           <dt>Severity</dt>
           <dd>
             <span className={`pill pill--risk-${ticket.severity}`}>{ticket.severity}</span>
@@ -202,8 +212,7 @@ function TicketDetailPanel({
 
       {ticket.escalation_required && (
         <p className="assessment__escalation" role="status">
-          This ticket requires a human response and must be acknowledged before it can be
-          resolved.
+          {ticket.human_acknowledged ? 'A team member has accepted this event.' : 'This event requires human review. Automatic escalation does not confirm acceptance by a person.'}
         </p>
       )}
 
@@ -226,7 +235,7 @@ function TicketDetailPanel({
                 {event.to_status && ` · → ${event.to_status.replace('_', ' ')}`}
                 {event.to_severity && ` · → ${event.to_severity}`}
               </span>
-              {event.note && <p className="timeline__note">{event.note}</p>}
+              {event.note && <p className="timeline__note">{event.event_type === 'report_fact' ? event.note.replace(/^Report task [a-z0-9-]+:\s*/i, '') : event.note}</p>}
             </li>
           ))}
         </ol>

@@ -15,6 +15,12 @@ summary: >-
 
 # Access Control Policy
 
+## 中文摘要：访问控制与权限管理
+
+访问控制遵循最小权限、按需知悉、职责分离和默认拒绝。经理提交角色申请，系统所有者批准，IT 通过身份系统的角色组配置权限；申请人不能批准自己的请求。
+
+岗位变更需移除不再需要的权限，离职时及时禁用账号并撤销会话。管理员使用独立的特权账号，定期审查权限，第三方访问应设置期限。
+
 > **Simulated content.** Fictional sample documentation for a demonstration
 > system. Intended for IT support and the security team.
 

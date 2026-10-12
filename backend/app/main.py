@@ -6,9 +6,10 @@ production settings), then logging, then the database.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,8 +30,17 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Initialise shared resources for the lifetime of the process."""
     settings: Settings = app.state.settings
+    if settings.retention_policy_file:
+        from app.services.retention import read_policy
+
+        read_policy(settings.retention_policy_file)
+        if not settings.retention_backup_dir:
+            raise RuntimeError("Retention requires a configured backup directory.")
     settings.ensure_directories()
     init_db(settings)
+    from app.security.production_checks import check_production
+
+    check_production(settings)
 
     if settings.seed_demo_users and not settings.is_production:
         # Imported lazily so production images never load demo data paths.
@@ -64,18 +74,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Chat pipeline: retrieval + grounded generation. Constructed here so a
     # misconfigured LLM provider fails at startup rather than at first question.
-    from app.security.login_guard import LoginGuard
-    from app.security.rate_limit import SlidingWindowLimiter
+    from app.security.limit_factory import login_guard, window_limiter
     from app.services.chat_service import ChatService
 
     app.state.chat = ChatService(knowledge, settings)
-    app.state.chat_limiter = SlidingWindowLimiter(limit=settings.chat_rate_limit_per_minute)
-    app.state.login_guard = LoginGuard(
-        max_attempts=settings.auth_max_login_attempts,
-        window_seconds=settings.auth_login_window_seconds,
-        lockout_seconds=settings.auth_lockout_seconds,
-        ip_max_attempts=settings.auth_max_login_attempts_per_ip,
+    app.state.chat_limiter = window_limiter(
+        settings, scope="chat_limiter", limit=settings.chat_rate_limit_per_minute
     )
+    app.state.login_guard = login_guard(settings)
 
     logger.info(
         "startup_complete app=%s version=%s env=%s llm=%s vector_store=%s",
@@ -91,9 +97,40 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "Existing sessions are invalidated on restart. Set AUTH_SECRET_KEY in .env "
             "to keep sessions stable during development."
         )
+    from app.services.maintenance import maintenance_loop
+    from app.services.notifications import notification_loop
+    from app.services.workflow_worker import recovery_loop
+
+    worker = (
+        asyncio.create_task(recovery_loop(app.state.chat.workflow_tasks, settings))
+        if settings.workflow_retry_interval_seconds
+        else None
+    )
+    maintenance = (
+        asyncio.create_task(maintenance_loop(settings))
+        if settings.maintenance_interval_seconds
+        else None
+    )
+    notification_worker = (
+        asyncio.create_task(notification_loop(settings))
+        if settings.notification_webhook_url and settings.notification_poll_interval_seconds
+        else None
+    )
     try:
         yield
     finally:
+        if worker is not None:
+            worker.cancel()
+            with suppress(asyncio.CancelledError):
+                await worker
+        if maintenance is not None:
+            maintenance.cancel()
+            with suppress(asyncio.CancelledError):
+                await maintenance
+        if notification_worker is not None:
+            notification_worker.cancel()
+            with suppress(asyncio.CancelledError):
+                await notification_worker
         dispose_engine()
         logger.info("shutdown_complete")
 

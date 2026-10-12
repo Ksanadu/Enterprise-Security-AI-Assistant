@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
-from sqlalchemy import text
+from fastapi.responses import JSONResponse
+from sqlalchemy import false, text, update
 
 from app import __version__
 from app.api.deps import AppSettings, DbSession
 from app.core.enums import Role
+from app.db.models import DataHold, NotificationOutbox, SecurityLimitBucket, WorkflowTask
 from app.schemas.common import HealthResponse, MetaResponse
 
 router = APIRouter(tags=["system"])
@@ -20,8 +22,31 @@ def health(request: Request, session: DbSession, settings: AppSettings) -> Healt
     try:
         session.execute(text("SELECT 1"))
         checks["database"] = "ok"
+        # A read-only database can answer SELECT 1 but cannot preserve incidents.
+        # A zero-row write probes the incident table without changing data.
+        session.execute(update(WorkflowTask).where(false()).values(attempts=WorkflowTask.attempts))
+        checks["workflow_store"] = "ok"
+        if settings.shared_security_limits:
+            session.execute(
+                update(SecurityLimitBucket)
+                .where(false())
+                .values(expires_at=SecurityLimitBucket.expires_at)
+            )
+            checks["shared_security_store"] = "ok"
+        session.execute(
+            update(NotificationOutbox).where(false()).values(attempts=NotificationOutbox.attempts)
+        )
+        checks["notification_store"] = "ok"
+        session.execute(update(DataHold).where(false()).values(case_label=DataHold.case_label))
+        checks["retention_store"] = "ok"
     except Exception:  # pragma: no cover - depends on external failure
         checks["database"] = "error"
+        checks["workflow_store"] = "error"
+        checks["notification_store"] = "error"
+        checks["retention_store"] = "error"
+        if settings.shared_security_limits:
+            checks["shared_security_store"] = "error"
+        session.rollback()
 
     # The knowledge base is reported but does not make the process unhealthy:
     # authentication and health monitoring must keep working while an operator
@@ -34,17 +59,21 @@ def health(request: Request, session: DbSession, settings: AppSettings) -> Healt
     else:
         checks["knowledge_base"] = "degraded"
 
-    status = (
-        "ok"
-        if checks.get("database") == "ok" and checks.get("knowledge_base") != "unavailable"
-        else "degraded"
-    )
+    status = "ok" if all(value == "ok" for value in checks.values()) else "degraded"
     return HealthResponse(
         status=status,
         app_name=settings.app_name,
         version=__version__,
         environment=settings.app_env,
         checks=checks,
+    )
+
+
+@router.get("/ready", summary="Business readiness", response_model=HealthResponse)
+def ready(request: Request, session: DbSession, settings: AppSettings):
+    result = health(request, session, settings)
+    return JSONResponse(
+        status_code=200 if result.status == "ok" else 503, content=result.model_dump()
     )
 
 

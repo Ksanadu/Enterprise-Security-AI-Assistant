@@ -124,7 +124,9 @@ def count_active_sessions(session: Session, *, user_id: int) -> int:
     return len(list_active_sessions(session, user_id=user_id))
 
 
-def purge_expired_sessions(session: Session, *, retention_days: int = 30) -> int:
+def purge_expired_sessions(
+    session: Session, *, retention_days: int = 30, batch_size: int = 1000
+) -> int:
     """Delete session rows that expired more than ``retention_days`` ago.
 
     Revoked and expired rows are evidence, so they are kept for a while rather
@@ -133,7 +135,16 @@ def purge_expired_sessions(session: Session, *, retention_days: int = 30) -> int
     cutoff = _now() - dt.timedelta(days=max(1, retention_days))
     result = cast(
         CursorResult[Any],
-        session.execute(delete(UserSession).where(UserSession.expires_at < cutoff)),
+        session.execute(
+            delete(UserSession).where(
+                UserSession.id.in_(
+                    select(UserSession.id)
+                    .where(UserSession.expires_at < cutoff)
+                    .order_by(UserSession.expires_at, UserSession.id)
+                    .limit(max(1, batch_size))
+                )
+            )
+        ),
     )
     removed = int(result.rowcount or 0)
     if removed:

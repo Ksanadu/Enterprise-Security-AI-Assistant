@@ -16,6 +16,7 @@ from app.core.errors import AppError
 from app.rag.index import IndexStats, KnowledgeIndex
 from app.rag.retriever import RetrievalResult, Retriever
 from app.security.rbac import describe_role
+from app.security.redaction import redact_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ class KnowledgeService:
         """Authorisation-filtered retrieval."""
         if not self._index.is_built:
             raise KnowledgeUnavailableError()
-        return self._retriever.retrieve(query, role=role, top_k=top_k)
+        return self._retriever.retrieve(redact_credentials(query), role=role, top_k=top_k)
 
     def context_for(self, query: str, *, role: Role, top_k: int | None = None) -> RetrievalResult:
         """Alias used by the chat pipeline (Phase 5)."""

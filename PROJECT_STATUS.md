@@ -1,6 +1,18 @@
 # PROJECT STATUS — Enterprise Security AI Assistant
 
-**Current Phase:** Stabilization — **complete**. Every confirmed defect from `Reviewer Report.md`
+> 2026-10-12：后续完善已启动。下面的稳定化结论和数字是历史记录，
+> 不能替代 [当前实施与验收记录](docs/PHASE_PROGRESS.md)。
+> 新审查缺陷正在按 [分阶段方案](docs/IMPROVEMENT_PLAN.md) 修复。
+
+Current October collection: of 1810 collected (2026-10-13; collection only, not a pass result).
+
+Latest October engineering gate: 1803 backend passed, 7 skipped, coverage 94.86%; 81 frontend passed; all gates exit 0 (`logs/phase0/phase8-engineering-gate.log`, 2026-10-13). Independent quality and external deployment acceptance remain separate and incomplete.
+
+2026-10-13 additions: approved-policy retention/holds, schema 04, explicit account provisioning and release integrity tools. Targeted retention/release/account/migration checks: 48 passed. Actual two-artifact A/B-failure/restore/A rollback, retention CLI and new local Demo 71/71 passed. Existing business databases and .env were preserved. Formal deployment, approved business policy, live providers and new independent quality acceptance remain pending.
+
+**Current Phase:** Improvement Phase 8 local handoff verified; final sign-off incomplete. The local bundle binds 273 source assets, runtime and actual evidence, retaining four pending external gates. Phase 7 formal deployment, Docker, live providers and independent quality acceptance remain pending. See [Phase 8 handoff](docs/PHASE8_HANDOFF.md).
+
+**Historical Phase:** Stabilization — **complete**. Every confirmed defect from `Reviewer Report.md`
 and `PROJECT_HANDOFF.md` §8.1 has been fixed, verified and committed in six rounds. The project is
 back to a green gate; what is left (see "What remains") is the honest limits of the verification
 and normal product evolution rather than repair.
@@ -511,20 +523,19 @@ Two things worth carrying forward:
 ## What remains
 
 Not defects in the code - the confirmed defect list is empty - but the honest limits:
-- [ ] **Acceptance criterion §9.10 is the only unproven one**: `docker compose up` has never run
+- [ ] **Historical verification gap §9.10**: `docker compose up` had not run
       (no container runtime on the development machine). R11 removed the reason the documented
       command could never have worked — the missing-`.env` prerequisite — and added a one-command
       launcher and 30 tests, but *executing* it still requires a machine with Docker. Everything
-      else is verified by execution.
+      else was checked only within that original prototype's test scope. Current independent quality, live model and deployment gaps are listed in the October acceptance matrix.
 - [ ] Answer quality against a real provider is unmeasured (the *request path* is now tested; the
       prose is not). `LLM_PROVIDER=openai_compatible` switches it.
 - [ ] P2/P3 improvements from the review, none of them repaired here because they are not defects:
-      Alembic migrations, a shared rate-limit store (the limiter is still per-process), CI coverage
-      publishing, audit retention policy, streaming responses, i18n, semantic embeddings by default.
+      Historical items included migrations, shared limits and retention; those now have local implementations and evidence. Formal deployment remains pending. Streaming, i18n and semantic embeddings by default remain product choices, separate from the required live Embedding acceptance.
 
-## Current Phase
+## Historical Phase — September stabilization
 
-**Stabilization — complete.** The list above is the record; this file is updated at the end of
+**Stabilization — complete (historical).** The list above is the record; this file is updated at the end of
 every round, in the same commit as the change it describes.
 
 **Decisions taken** (previously open questions):

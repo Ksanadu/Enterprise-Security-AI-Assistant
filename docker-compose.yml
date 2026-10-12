@@ -40,6 +40,7 @@ name: esaa
 
 services:
   backend:
+    stop_grace_period: 90s
     build:
       context: ./backend
     image: esaa-backend:local
@@ -102,7 +103,7 @@ services:
         - -c
         - >-
           import sys, urllib.request;
-          sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4).getcode() == 200 else 1)
+          sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/ready', timeout=4).getcode() == 200 else 1)
       interval: 30s
       timeout: 5s
       retries: 3

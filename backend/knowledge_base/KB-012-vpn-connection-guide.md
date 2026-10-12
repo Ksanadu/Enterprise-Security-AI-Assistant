@@ -17,6 +17,12 @@ summary: >-
 
 # VPN Connection Guide (Employee Guide)
 
+## 中文摘要：员工 VPN 连接指南
+
+公司 VPN 或虚拟专用网络突然连不上、连接失败时，先检查互联网连接，再检查账号和 MFA、客户端状态、设备时间及服务状态页面。使用公司管理的设备和批准的 VPN 客户端连接公司网关。
+
+排查时可以重启客户端并尝试另一网络；检查是否存在已知故障。不要为连接 VPN 关闭终端保护；如果以上步骤无法解决，联系 IT 服务台并创建 IT 工单。
+
 > **Simulated content.** Fictional sample documentation for a demonstration
 > system.
 

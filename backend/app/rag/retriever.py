@@ -81,7 +81,7 @@ class RetrievalResult:
         model can cite precisely - and so a citation can be verified against the
         sources list afterwards.
         """
-        if not self.matches:
+        if not self.matches or max_chars <= 0:
             return ""
 
         blocks: list[str] = []
@@ -91,12 +91,34 @@ class RetrievalResult:
             header = f"[{index}] {chunk.document_id} — {chunk.title} › {chunk.section}"  # noqa: RUF001
             body = chunk.text.strip()
             block = f"{header}\n{body}"
-            if used + len(block) > max_chars and blocks:
-                break
+            if used + len(block) > max_chars:
+                if blocks or len(header) + 1 >= max_chars:
+                    break
+                # The first match must obey the budget too, even if its chunk
+                # is larger than the entire context allowance.
+                block = block[:max_chars]
             blocks.append(block)
             used += len(block) + 2
 
         return "\n\n".join(blocks)
+
+    def context_matches(self, max_chars: int) -> tuple[ScoredChunk, ...]:
+        selected: list[ScoredChunk] = []
+        used = 0
+        for index, match in enumerate(self.matches, start=1):
+            chunk = match.chunk
+            header = f"[{index}] {chunk.document_id} — {chunk.title} › {chunk.section}"  # noqa: RUF001
+            remaining = max_chars - used - len(header) - 1
+            if remaining <= 0:
+                break
+            body = chunk.text.strip()
+            if len(body) > remaining:
+                if selected:
+                    break
+                body = body[:remaining]
+            selected.append(dataclasses.replace(match, chunk=dataclasses.replace(chunk, text=body)))
+            used += len(header) + 1 + len(body) + 2
+        return tuple(selected)
 
     def audit_detail(self) -> dict[str, Any]:
         """Metadata-only summary safe to write to the audit log."""

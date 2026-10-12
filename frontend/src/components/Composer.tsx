@@ -5,11 +5,15 @@ export interface ComposerProps {
   sending: boolean
   maxLength: number
   onSend: (content: string) => Promise<void>
+  suggestion?: { text: string; id: number } | null
 }
 
-export function Composer({ disabled, sending, maxLength, onSend }: ComposerProps) {
+export function Composer({ disabled, sending, maxLength, onSend, suggestion }: ComposerProps) {
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    if (suggestion) { setValue(suggestion.text); textareaRef.current?.focus() }
+  }, [suggestion])
 
   useEffect(() => {
     if (!sending) textareaRef.current?.focus()

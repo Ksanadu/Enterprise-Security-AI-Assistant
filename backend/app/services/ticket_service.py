@@ -19,11 +19,12 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.core.enums import Role, Severity, TicketSource, TicketStatus
 from app.core.errors import NotFoundError, PermissionDeniedError, ValidationError
-from app.db.models import Message, Ticket, TicketEvent, User
+from app.db.models import Message, Ticket, TicketEvent, TicketSequence, User
 from app.security.rbac import can_update_ticket, can_view_ticket, visible_ticket_filter
 from app.security.redaction import redact_credentials
 
@@ -95,10 +96,22 @@ class TicketService:
         now = now or dt.datetime.now(dt.UTC)
         prefix = REFERENCE_PREFIX[owner_role]
         pattern = f"{prefix}-{now.year}-%"
-        existing = session.scalar(
-            select(func.count(Ticket.id)).where(Ticket.reference.like(pattern))
-        )
-        return build_reference(prefix, now.year, int(existing or 0) + 1)
+        references = session.scalars(
+            select(Ticket.reference).where(Ticket.reference.like(pattern))
+        ).all()
+        maximum = max((int(reference.rsplit("-", 1)[1]) for reference in references), default=0)
+        key = f"{prefix}-{now.year}"
+        # SQLite UPSERT acquires the writer lock before allocation and returns
+        # the atomic counter. Seeded and imported references establish a floor.
+        statement = sqlite_insert(TicketSequence).values(key=key, value=maximum + 1)
+        allocation = statement.on_conflict_do_update(
+            index_elements=[TicketSequence.key],
+            set_={"value": func.max(TicketSequence.value, maximum) + 1},
+        ).returning(TicketSequence.value)
+        sequence = session.scalar(allocation)
+        if sequence is None:
+            raise TicketValidationError("Could not allocate a ticket reference.")
+        return build_reference(prefix, now.year, int(sequence))
 
     def create_ticket(
         self,
@@ -144,6 +157,9 @@ class TicketService:
         )
         session.add(ticket)
         session.flush()
+        from app.services.notifications import enqueue
+
+        enqueue(session, ticket)
 
         self.record_event(
             session,
@@ -423,6 +439,9 @@ class TicketService:
             changed,
             reason[:80],
         )
+        from app.services.notifications import enqueue
+
+        enqueue(session, ticket)
         return ticket
 
     def add_note(self, session: Session, *, user: User, ticket: Ticket, note: str) -> TicketEvent:
@@ -512,7 +531,9 @@ class TicketService:
             rows = session.execute(
                 select(column, func.count()).select_from(Ticket).where(*scope).group_by(column)
             ).all()
-            return {str(key.value if hasattr(key, "value") else key): int(value) for key, value in rows}
+            return {
+                str(key.value if hasattr(key, "value") else key): int(value) for key, value in rows
+            }
 
         by_status = {status.value: 0 for status in TicketStatus}
         by_status.update(group(Ticket.status))

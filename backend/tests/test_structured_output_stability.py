@@ -166,7 +166,7 @@ class TestDeterminism:
     #: allocated record. Everything else must be byte-identical: a payload that
     #: drifts between identical requests cannot be regression-tested, and a client
     #: cannot cache or compare it.
-    ALLOCATED_FIELDS = frozenset({"ticket_reference"})
+    ALLOCATED_FIELDS = frozenset({"ticket_reference", "workflow_task_id", "reply_to_message_id"})
 
     @classmethod
     def _stable_part(cls, payload: dict[str, Any]) -> str:
@@ -192,9 +192,9 @@ class TestDeterminism:
         payloads = [_ask(client, headers, QUESTIONS[label]) for _ in range(3)]
         first = self._stable_part(payloads[0])
         for index, payload in enumerate(payloads[1:], start=2):
-            assert self._stable_part(payload) == first, (
-                f"run {index} differed from run 1 for {label!r}"
-            )
+            assert (
+                self._stable_part(payload) == first
+            ), f"run {index} differed from run 1 for {label!r}"
 
     def test_an_allocated_reference_is_the_only_thing_that_changes(
         self, client: TestClient
@@ -210,9 +210,9 @@ class TestDeterminism:
             for key in REQUIRED_FIELDS
             if len({json.dumps(payload[key], sort_keys=True) for payload in payloads}) > 1
         }
-        assert differing <= self.ALLOCATED_FIELDS, (
-            f"these fields vary between identical requests: {sorted(differing)}"
-        )
+        assert (
+            differing <= self.ALLOCATED_FIELDS
+        ), f"these fields vary between identical requests: {sorted(differing)}"
         # And the allocation really happened, so this is not vacuous.
         references = {payload["ticket_reference"] for payload in payloads}
         assert len(references) == 3, references
@@ -241,7 +241,9 @@ class TestDeterminism:
         retrieval = knowledge.search("what are the password requirements", role=Role.EMPLOYEE)
         results = [
             generator.generate(
-                question="What are the password requirements?", role=Role.EMPLOYEE, retrieval=retrieval
+                question="What are the password requirements?",
+                role=Role.EMPLOYEE,
+                retrieval=retrieval,
             )
             for _ in range(3)
         ]
@@ -281,7 +283,14 @@ class TestValueDomains:
             assert math.isfinite(score), score
             assert 0.0 <= score <= 1.0, score
             assert isinstance(document["document_id"], str) and document["document_id"]
-            assert set(document) == {"document_id", "title", "category", "section", "score", "snippet"}
+            assert set(document) == {
+                "document_id",
+                "title",
+                "category",
+                "section",
+                "score",
+                "snippet",
+            }
 
         for signal in payload["risk_signals"]:
             assert set(signal) == {"label", "level", "evidence"}
@@ -301,9 +310,7 @@ class TestValueDomains:
         assert isinstance(payload["provider"], str) and payload["provider"]
         assert isinstance(payload["model"], str) and payload["model"]
 
-    def test_an_ungrounded_answer_still_satisfies_the_contract(
-        self, client: TestClient
-    ) -> None:
+    def test_an_ungrounded_answer_still_satisfies_the_contract(self, client: TestClient) -> None:
         payload = _ask(client, _sign_in(client, "employee"), QUESTIONS["ungrounded"])
         json.dumps(payload, allow_nan=False)
         assert payload["answer"].strip(), "even a refusal must carry answer text"
@@ -467,7 +474,9 @@ class TestPathologicalNestingIsRejected:
         self, client: TestClient
     ) -> None:
         """End to end: the payload still comes back, with the rule result."""
-        deep = ScriptedLLM('{"intent":"phishing","confidence":0.9,"reason":' + "[" * 50_000 + "]" * 50_000 + "}")
+        deep = ScriptedLLM(
+            '{"intent":"phishing","confidence":0.9,"reason":' + "[" * 50_000 + "]" * 50_000 + "}"
+        )
         service = client.app.state.chat  # type: ignore[attr-defined]
         original = service._intent_classifier
         service._intent_classifier = IntentClassifier(service._settings, client=deep)

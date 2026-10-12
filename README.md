@@ -1,5 +1,13 @@
 # Enterprise Security AI Assistant
 
+> 2026-10-12：项目正在按 [分阶段完善方案](docs/IMPROVEMENT_PLAN.md) 推进。
+> 当前执行结果见 [实施记录](docs/PHASE_PROGRESS.md)；下文既有测试数字属于此前版本的历史基线。
+> 本机环境恢复可运行 `scripts/setup-local.ps1 -PythonExecutable <Python-3.12路径>`。
+> 运维入口：[迁移与共享预算](docs/OPS_MIGRATIONS.md)、[备份恢复](docs/OPS_BACKUP.md)、[通知与账号转换](docs/OPS_NOTIFICATIONS.md)、[状态巡检](docs/OPS_MONITORING.md)。Docker 和真实模型仍待实际验收，Phase 7 尚未结项。
+> 当前 [验收矩阵](docs/ACCEPTANCE_MATRIX.md) 与 [试点部署手册](docs/OPS_PILOT_RUNBOOK.md) 可用于后续正式验收。
+> 2026-10-13 新增：[显式账号配置](docs/OPS_ACCOUNTS.md)、[业务保留与保全](docs/OPS_RETENTION.md)、[发布包与实际本地回滚](docs/OPS_RELEASE.md)。均使用隔离模拟库验证；正式政策、TLS/渠道和部署验收仍待完成。
+> 当前进入 [Phase 8 交接](docs/PHASE8_HANDOFF.md)，提供可校验的本地交付包和四类未完成门禁，完整方案尚未最终签收。
+
 A runnable prototype of an **enterprise security knowledge assistant**: employees ask
 security questions in natural language, the assistant answers **from an internal, role-scoped
 knowledge base**, cites its sources, classifies risk, and escalates high-risk incidents to a
@@ -22,7 +30,7 @@ human security team.
 
 ---
 
-## Project status
+## Original prototype implementation phases (historical)
 
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
@@ -37,7 +45,7 @@ human security team.
 | 9 | Docker Compose deployment | done |
 | 10 | README + demo documentation | done |
 
-All ten phases are complete.
+The table records the original prototype's implementation milestones. Current improvement Phase 8 is in progress; Docker, live providers, independent quality acceptance and formal deployment remain unaccepted. See [current acceptance matrix](docs/ACCEPTANCE_MATRIX.md).
 
 **Documentation**
 
@@ -364,10 +372,9 @@ field nobody reads is not an answer.
   the defect and the fix, so the reason the cursor exists stays documented.
 * **Document access** reporting: which documents were read most, which reads were refused, and
   refusals broken down by role.
-* **Schema-drift guard**: this project has no migration tool and `create_all` never alters an
+* **Historical schema-drift guard**: the original prototype had no migration tool and `create_all` never altered an
   existing table, so adding a column used to surface as a confusing "no such column" error.
-  Startup now detects drift, rebuilds the affected tables in development (demo data is
-  disposable and re-seeded) and refuses to start outside it with an explicit message.
+  October implementation now uses versioned Alembic migrations, refuses unexplained drift in every environment, and never rebuilds business tables at startup. Production migration is an explicit operator step after backup.
 * 858 backend tests + 59 frontend tests at the end of the phase; `ruff`, `mypy`, `tsc` and
   `eslint` clean.
 
@@ -931,19 +938,7 @@ Honest limitations of the default offline embedder:
   Both figures were re-measured against the live API during the stabilization pass - the shipped
   `.env` had drifted to 0.7 while every test used 0.5, which is why the drift is now asserted
   (see "Configuration is asserted, not assumed" below).
-* **The knowledge base is English-only, and so is every rule.** `PRODUCT_SPEC.md` §2 states its
-  four scenarios in Chinese, and measured, **three of the four return `out_of_scope` with no
-  source**: the intent rules, the risk rules, the guard patterns, the incident-shape backstop and
-  the tokenizer (`[a-z][a-z0-9_]{1,}`) are all ASCII, so a Chinese question matches nothing and
-  retrieves nothing. Scenario D is the near miss - the literal token `VPN` survives, so it is
-  classified and answered. This is the **largest known gap against the specification** and it is a
-  capability, not a defect: a multilingual deployment needs multilingual rules, tokenizer and
-  embeddings, and a regex patch over the Chinese phrasings in §2 would be worse than the honest
-  gap. Two things are done about it rather than around it: the evaluation set asserts the
-  limitation as `language-001` (expected `out_of_scope`), and when a message contains no Latin
-  letters at all the answer says so - "I can only search the English-language knowledge base at
-  the moment, and this question is not in English" - instead of implying the knowledge base has
-  nothing on the subject.
+* **The historical English-only defect has been repaired for the design scenarios.** Chinese knowledge content, classification and lexical retrieval now support the original four Chinese queries and their API regressions. `language-001` now expects the password-policy result. Broad multilingual semantic quality remains a separate live-provider and independent-evaluation requirement; the local cases do not establish universal language accuracy.
 * The knowledge base has **content gaps**. Account lockout, for example, has no document; the
   evaluation entry for it records the gap instead of being tuned away. The assistant returns
   the closest documents, which is the honest weak spot of a lexical retriever.
@@ -1202,9 +1197,7 @@ what?".
 
 ### Deployment
 
-* **Neither container runs as root.** The backend image creates uid 10001 and switches to it; the
-  nginx image runs its workers as `nginx`. Both set `no-new-privileges:true`, so a compromised
-  process cannot gain privileges it did not already have.
+* **Container identity is configured, pending actual acceptance.** The backend image switches to uid10001; nginx workers use `nginx`, while its master process starts as root. Both configure `no-new-privileges:true`. Actual image identity, mount permissions and network behavior require the Docker gate.
 * **Secrets never enter an image.** `AUTH_SECRET_KEY`, `LLM_API_KEY`, `EMBEDDING_API_KEY` and
   `DEMO_USER_PASSWORD` are deliberately absent from `docker-compose.yml` and read from `.env` at
   run time. Both `.dockerignore` files exclude `.env`, the database and the index, so a layer
@@ -1239,12 +1232,12 @@ what?".
 | ---------- | ------------- |
 | Access tokens are memory-only, so a page refresh signs the user out | configurable |
 | The dashboard is security-only; there is no per-team view | not scheduled |
-| Ticket notifications (email/chat) do not exist; the queue is pull-only | not scheduled |
+| Signed HTTPS notification outbox, retry/receipt and overdue reminders have local TLS evidence; formal email/chat recipients and alert supervision remain unaccepted | formal pilot gate |
 | Rule-based classification is keyword driven: unusual phrasing can land in the wrong bucket | improve with a hosted model |
 | The offline generator produces extractive answers, not prose | configure a hosted LLM |
-| Rate limiting and lockout state are **per process**. The deployment runs a single uvicorn worker, so this is correct as shipped; running several workers or replicas would need a shared store (Redis) before the limits mean anything. | not scheduled |
+| Rate limits and login lockouts now use shared persisted SQLite budgets; multiple processes were verified locally. Formal load/scale limits remain unaccepted | formal pilot gate |
 | The offline embedder is lexical, not semantic | configurable now |
-| No migration tool: schema changes rebuild the affected tables in development | acceptable pre-release |
+| Alembic schema04 is implemented; production requires explicit migration, unexplained drift is refused and business data is never rebuilt at startup | operator migration and backup required |
 | `docker compose up` was **not executed** in the development environment (no container runtime available); the compose file is verified structurally, by `docker compose config` where a CLI exists, and by the equivalent non-Docker path | verify on a machine with Docker |
 | The frontend image's nginx master process starts as root, because binding port 80 requires it. Workers drop to `nginx`; use an unprivileged base image or a high port to avoid root entirely. | optional hardening |
 | `read_only: true` for the backend root filesystem is written but commented out in `docker-compose.yml`, since it could not be verified here | optional hardening |
@@ -1267,7 +1260,7 @@ what?".
 | 9 | Docker Compose deployment with a production-safe configuration | done |
 | 10 | Complete demo script and architecture documentation | done |
 
-**All ten phases of `PRODUCT_SPEC.md` are complete.** The 13 acceptance criteria in section 9 are
+**The original ten implementation milestones are historical; final acceptance remains incomplete.** The 13 acceptance criteria in section 9 are
 mapped to their evidence in [docs/DEMO.md § Acceptance criteria traceability](docs/DEMO.md#5-acceptance-criteria-traceability).
 Criterion #10 (`docker compose up`) is implemented and reachable in one command from a fresh clone,
 and the compose file's contents, paths, secrets handling and launcher behaviour are covered by

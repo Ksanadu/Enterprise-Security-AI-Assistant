@@ -230,6 +230,18 @@ async function signIn(user = userEvent.setup()) {
 /* ---------------------------------------------------------------- tests -- */
 
 describe('sign-in', () => {
+  it('offers the demo guide only when enabled by the authenticated backend', async () => {
+    route({ '/meta': () => json(meta), '/auth/login': () => json(tokenResponse),
+      '/chat/capabilities': () => json({ ...capabilities, demo_enabled: true }),
+      '/chat/conversations': () => json(emptyList) })
+    render(<App />)
+    const user = userEvent.setup()
+    await screen.findByRole('button', { name: /sign in as employee/i })
+    await signIn(user)
+    await user.click(await screen.findByRole('button', { name: /A · 安全知识/ }))
+    expect(screen.getByRole('textbox')).toHaveValue('公司密码有什么要求？')
+    expect(screen.getByLabelText('Actual response pipeline')).toHaveTextContent('等待提问')
+  })
   it('shows the login form and the simulated-data disclaimer', async () => {
     route({ '/meta': () => json(meta) })
     render(<App />)
@@ -370,7 +382,7 @@ describe('chat workspace', () => {
     await user.type(screen.getByLabelText(/ask a security question/i), 'what is the capital of France')
     await user.click(screen.getByRole('button', { name: /^send$/i }))
 
-    expect(await screen.findByText(/no matching document/i)).toBeInTheDocument()
+    expect(await screen.findByText(/answer not verified against sources/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/sources/i)).not.toBeInTheDocument()
   })
 
@@ -506,7 +518,7 @@ describe('chat workspace', () => {
     const assessment = await screen.findByLabelText(/assessment/i)
     expect(within(assessment).getByText('High risk')).toBeInTheDocument()
     expect(within(assessment).getByText('Phishing')).toBeInTheDocument()
-    expect(within(assessment).getByText(/flagged for the security team/i)).toBeInTheDocument()
+    expect(within(assessment).getByText(/human review is required/i)).toBeInTheDocument()
     expect(within(assessment).getByText('credentials_submitted')).toBeInTheDocument()
   })
 
@@ -691,6 +703,20 @@ describe('tickets', () => {
     ).toBeInTheDocument()
   })
 
+  it('opens the notification ticket link after login using the authenticated API', async () => {
+    window.history.replaceState(null, '', '/?ticket=SEC-2026-0007')
+    try {
+      await openTickets({ '/tickets/SEC-2026-0007': () => json(ticketDetail) })
+      const detail = await screen.findByLabelText(/ticket detail/i)
+      expect(within(detail).getByText('Created automatically by the assistant.')).toBeInTheDocument()
+      const request = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/tickets/SEC-2026-0007'))
+      expect(request?.[1]?.headers).toMatchObject({ Authorization: 'Bearer test-token' })
+      expect(screen.queryByLabelText('Notification delivery')).not.toBeInTheDocument()
+    } finally {
+      window.history.replaceState(null, '', '/')
+    }
+  })
+
   it('offers status changes only when the server allows them', async () => {
     const readonly = { ...ticketDetail, can_update: false }
     const user = await openTickets({ '/tickets/SEC-2026-0007': () => json(readonly) })
@@ -717,7 +743,7 @@ describe('tickets', () => {
     await user.click(await screen.findByText('SEC-2026-0007'))
 
     const detail = await screen.findByLabelText(/ticket detail/i)
-    expect(within(detail).getByText(/must be acknowledged before it can be resolved/i)).toBeInTheDocument()
+    expect(within(detail).getByText(/automatic escalation does not confirm acceptance/i)).toBeInTheDocument()
   })
 
   it('shows the ticket raised by an answer', async () => {
@@ -829,7 +855,7 @@ describe('creating a ticket from an answer', () => {
   })
 
   it('does not offer it when nothing in the knowledge base matched', async () => {
-    await askAndGetAnswer({}, { grounded: false })
+    await askAndGetAnswer({}, { grounded: false, source_documents: [] })
     expect(screen.queryByRole('button', { name: /create ticket/i })).not.toBeInTheDocument()
   })
 

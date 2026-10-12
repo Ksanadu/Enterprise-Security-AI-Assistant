@@ -15,6 +15,12 @@ summary: >-
 
 # VPN Troubleshooting SOP
 
+## 中文摘要：IT 支持 VPN 排查
+
+公司虚拟专用网络连接失败时，IT 服务台应收集错误信息、最后成功连接时间和影响范围，依次核查账号权限、客户端版本、密码和 MFA、本地网络、DNS、适配器、设备时间及证书。
+
+多人同时无法连接时先检查网关服务状态。排查仍未解决时创建或更新 IT 工单，记录客户端日志、错误时间和源网络，并按本 SOP 的升级条件交给网络团队。
+
 > **Simulated content.** Fictional sample documentation for a demonstration
 > system. Intended for the IT service desk and the security team.
 

@@ -35,6 +35,7 @@ from app.ai.prompts import (
 from app.core.config import Settings, get_settings
 from app.core.enums import Role
 from app.rag.retriever import RetrievalResult
+from app.security.redaction import redact_credentials
 
 logger = logging.getLogger(__name__)
 
@@ -76,14 +77,72 @@ POSITIVE_INTRO = re.compile(
 #: are configuration values and prohibited examples, not instructions.
 ACTION_VERBS = frozenset(
     {
-        "be", "use", "keep", "store", "enable", "require", "rotate", "report", "contact",
-        "change", "check", "verify", "review", "remove", "install", "update", "configure",
-        "ensure", "confirm", "notify", "follow", "apply", "replace", "delete", "set",
-        "choose", "sign", "share", "write", "send", "ask", "tell", "run", "take",
-        "disconnect", "wipe", "reset", "monitor", "validate", "restrict", "limit",
-        "protect", "approve", "reject", "escalate", "open", "close", "log", "record",
-        "turn", "switch", "join", "leave", "stop", "start", "provide", "give",
-        "put", "make", "avoid", "never", "always", "must", "should", "do", "don't",
+        "be",
+        "use",
+        "keep",
+        "store",
+        "enable",
+        "require",
+        "rotate",
+        "report",
+        "contact",
+        "change",
+        "check",
+        "verify",
+        "review",
+        "remove",
+        "install",
+        "update",
+        "configure",
+        "ensure",
+        "confirm",
+        "notify",
+        "follow",
+        "apply",
+        "replace",
+        "delete",
+        "set",
+        "choose",
+        "sign",
+        "share",
+        "write",
+        "send",
+        "ask",
+        "tell",
+        "run",
+        "take",
+        "disconnect",
+        "wipe",
+        "reset",
+        "monitor",
+        "validate",
+        "restrict",
+        "limit",
+        "protect",
+        "approve",
+        "reject",
+        "escalate",
+        "open",
+        "close",
+        "log",
+        "record",
+        "turn",
+        "switch",
+        "join",
+        "leave",
+        "stop",
+        "start",
+        "provide",
+        "give",
+        "put",
+        "make",
+        "avoid",
+        "never",
+        "always",
+        "must",
+        "should",
+        "do",
+        "don't",
     }
 )
 
@@ -114,6 +173,7 @@ class GeneratedAnswer:
     #: Instruction-like text found inside the retrieved context and removed
     #: before the model saw it. Recorded for the audit trail.
     context_findings: tuple[GuardFinding, ...] = ()
+    grounding_status: str = "unverified"
 
     @property
     def has_sources(self) -> bool:
@@ -127,10 +187,7 @@ class GeneratedAnswer:
 def _has_no_latin_script(text: str) -> bool:
     """True when a message contains no Latin letters at all.
 
-    The knowledge base, the tokenizer and every classification rule are English-only,
-    and that is documented as a known limitation rather than hidden. Detecting "this was
-    never going to match" lets the answer say so instead of implying the knowledge base
-    has nothing on the subject.
+    Used to choose the language of the no-context notice; CJK retrieval is supported.
     """
     return bool(text.strip()) and re.search(r"[A-Za-z]", text) is None
 
@@ -227,9 +284,7 @@ class ResponseGenerator:
         fallback = MockLLMClient()
         completion = fallback.complete(
             system_prompt=SYSTEM_PROMPT,
-            user_prompt=build_user_prompt(
-                question=question, role=role, document_titles=[]
-            ),
+            user_prompt=build_user_prompt(question=question, role=role, document_titles=[]),
             context_block=context,
         )
         return replace(completion, provider="offline-fallback")
@@ -254,10 +309,26 @@ class ResponseGenerator:
 
     def generate(self, *, question: str, role: Role, retrieval: RetrievalResult) -> GeneratedAnswer:
         """Produce a grounded answer for an already-authorised retrieval."""
-        sources = retrieval.sources
-        cited = retrieval.cited_document_ids
+        safe_matches = []
+        findings: list[GuardFinding] = []
+        for match in retrieval.matches:
+            safe_text, detected = self._guard.scan_context(match.chunk.text)
+            findings.extend(detected)
+            if safe_text.strip():
+                safe_matches.append(
+                    dataclasses.replace(
+                        match, chunk=dataclasses.replace(match.chunk, text=safe_text)
+                    )
+                )
+        safe_retrieval = dataclasses.replace(retrieval, matches=tuple(safe_matches))
+        effective = dataclasses.replace(
+            safe_retrieval,
+            matches=safe_retrieval.context_matches(self._settings.retrieval_max_context_chars),
+        )
+        sources = effective.sources
+        cited = effective.cited_document_ids
 
-        if not retrieval.has_matches:
+        if not effective.has_matches:
             return GeneratedAnswer(
                 answer=build_no_context_answer(
                     role=role, non_latin_question=_has_no_latin_script(question)
@@ -270,16 +341,21 @@ class ResponseGenerator:
                 model="none",
                 offline=True,
                 retrieval=retrieval,
+                grounding_status="no_context",
+                context_findings=tuple(findings),
             )
 
-        context = retrieval.context(max_chars=self._settings.retrieval_max_context_chars)
+        context = effective.context(max_chars=self._settings.retrieval_max_context_chars)
         # Retrieved text is data, but a document could still contain text that
         # reads like an instruction. Remove those lines before the model sees
         # them rather than trusting the model to ignore them.
-        context, context_findings = self._guard.scan_context(context)
+        context, detected = self._guard.scan_context(context)
+        context_findings = (*findings, *detected)
         titles = [str(source["title"]) for source in sources]
 
-        user_prompt = build_user_prompt(question=question, role=role, document_titles=titles)
+        user_prompt = build_user_prompt(
+            question=redact_credentials(question), role=role, document_titles=titles
+        )
         try:
             completion = self._client.complete(
                 system_prompt=SYSTEM_PROMPT,
@@ -299,6 +375,7 @@ class ResponseGenerator:
             completion = self._offline_completion(context=context, question=question, role=role)
 
         answer = completion.text.strip()
+        has_answer = bool(answer)
         if not answer:
             # A provider that returns nothing must not produce a silent empty
             # answer. Which fallback is honest depends on whether retrieval found
@@ -324,12 +401,24 @@ class ResponseGenerator:
             recommended_actions=actions,
             source_documents=sources,
             cited_document_ids=cited,
-            grounded=True,
+            # Context sent to a model is not evidence that its answer is supported.
+            grounded=has_answer
+            and completion.provider in {"mock", "offline-fallback"}
+            and completion.offline,
             provider=completion.provider,
             model=completion.model,
             offline=completion.offline,
             retrieval=retrieval,
             context_findings=context_findings,
+            grounding_status=(
+                "extractive"
+                if has_answer
+                and completion.provider in {"mock", "offline-fallback"}
+                and completion.offline
+                else "context_supplied"
+                if has_answer
+                else "generation_failed"
+            ),
         )
 
     def describe_provider(self) -> dict[str, object]:

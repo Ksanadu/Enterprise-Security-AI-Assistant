@@ -38,39 +38,41 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         token = request_id_var.set(request_id)
         started = time.perf_counter()
         try:
-            response = await call_next(request)
-        except Exception:
-            duration_ms = (time.perf_counter() - started) * 1000
-            logger.exception(
-                "http_request_failed method=%s path=%s duration_ms=%.1f",
-                request.method,
-                request.url.path,
-                duration_ms,
-            )
-            raise
+            try:
+                response = await call_next(request)
+            except Exception:
+                self.log_result(request, started, 500, failed=True)
+                raise
+            response.headers[REQUEST_ID_HEADER] = request_id
+            response.headers.setdefault("X-Content-Type-Options", "nosniff")
+            response.headers.setdefault("X-Frame-Options", "DENY")
+            response.headers.setdefault("Referrer-Policy", "no-referrer")
+            if request.url.path.startswith("/api/"):
+                response.headers.setdefault("Cache-Control", "no-store")
+                response.headers.setdefault("Pragma", "no-cache")
+            self.log_result(request, started, response.status_code)
+            return response
         finally:
             request_id_var.reset(token)
 
+    @staticmethod
+    def log_result(request: Request, started: float, status: int, *, failed: bool = False) -> None:
         duration_ms = (time.perf_counter() - started) * 1000
-        response.headers[REQUEST_ID_HEADER] = request_id
-        # Security headers for any browser-facing deployment.
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "no-referrer")
-
-        # API responses carry policy text, incident answers and conversation
-        # history. None of it belongs in a shared cache or the browser's history
-        # cache.
-        if request.url.path.startswith("/api/"):
-            response.headers.setdefault("Cache-Control", "no-store")
-            response.headers.setdefault("Pragma", "no-cache")
-
-        if request.url.path not in {"/health", "/healthz"}:
-            logger.info(
-                "http_request method=%s path=%s status=%s duration_ms=%.1f",
-                request.method,
-                request.url.path,
-                response.status_code,
-                duration_ms,
-            )
-        return response
+        # Route templates have bounded cardinality and never expose a user-supplied
+        # identifier or query string to the monitoring pipeline.
+        path = getattr(request.scope.get("route"), "path", "<unmatched>")
+        log = logger.exception if failed else logger.info
+        log(
+            "http_request method=%s path=%s status=%s duration_ms=%.1f",
+            request.method,
+            path,
+            status,
+            duration_ms,
+            extra={
+                "request_id": request_id_var.get(),
+                "method": request.method,
+                "route": path,
+                "status": status,
+                "duration_ms": round(duration_ms, 2),
+            },
+        )

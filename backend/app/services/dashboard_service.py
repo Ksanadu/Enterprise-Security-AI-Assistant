@@ -26,6 +26,7 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.core.enums import AuditOutcome, Intent, RiskLevel, Role, Severity, TicketStatus
+from app.core.time import iso_utc
 from app.db.models import (
     AuditLog,
     Conversation,
@@ -35,6 +36,7 @@ from app.db.models import (
     User,
     UserSession,
 )
+from app.security.acknowledgment import human_response_predicate
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +144,10 @@ class DashboardService:
             session.scalar(
                 select(func.count(Ticket.id)).where(
                     Ticket.escalation_required.is_(True),
-                    Ticket.status == TicketStatus.OPEN,
+                    Ticket.status.notin_([TicketStatus.RESOLVED, TicketStatus.CLOSED]),
+                    ~select(TicketEvent.id)
+                    .where(TicketEvent.ticket_id == Ticket.id, human_response_predicate())
+                    .exists(),
                 )
             )
             or 0
@@ -356,7 +361,7 @@ class DashboardService:
                 TicketEvent.ticket_id.label("ticket_id"),
                 func.min(TicketEvent.created_at).label("acknowledged_at"),
             )
-            .where(TicketEvent.automated.is_(False))
+            .where(human_response_predicate())
             .group_by(TicketEvent.ticket_id)
             .subquery()
         )
@@ -422,9 +427,7 @@ class DashboardService:
             counter = counter.where(*conditions)
             total = int(session.scalar(counter) or 0)
             rows = session.scalars(
-                statement.order_by(AuditLog.id.desc())
-                .limit(page_size)
-                .offset(max(0, query.offset))
+                statement.order_by(AuditLog.id.desc()).limit(page_size).offset(max(0, query.offset))
             ).all()
 
         entries = [self._entry(row) for row in rows]
@@ -448,7 +451,7 @@ class DashboardService:
         detail_keys = sorted(row.detail.keys()) if isinstance(row.detail, dict) else []
         return {
             "id": row.id,
-            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "created_at": iso_utc(row.created_at),
             "action": row.action,
             "outcome": row.outcome.value,
             "actor_role": row.actor_role,

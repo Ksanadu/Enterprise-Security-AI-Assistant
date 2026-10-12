@@ -13,7 +13,7 @@ from functools import lru_cache
 from typing import Any
 
 from sqlalchemy import Engine, create_engine, event, inspect
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, sessionmaker, with_loader_criteria
 
 from app.core.config import Settings, get_settings
 from app.db.base import Base
@@ -22,6 +22,19 @@ logger = logging.getLogger(__name__)
 
 #: Engines created in this process, so shutdown/tests can dispose them all.
 _ENGINES: list[Engine] = []
+
+
+@event.listens_for(Session, "do_orm_execute")
+def hide_erased_records(execute_state):
+    if execute_state.is_select and not execute_state.execution_options.get(
+        "include_retention_records"
+    ):
+        from app.db.models import AuditLog, Conversation, Message, Ticket
+
+        for model in (Conversation, Message, Ticket, AuditLog):
+            execute_state.statement = execute_state.statement.options(
+                with_loader_criteria(model, model.purged_at.is_(None), include_aliases=True)
+            )
 
 
 def _engine_kwargs(settings: Settings) -> dict[str, Any]:
@@ -95,10 +108,8 @@ def get_db() -> Iterator[Session]:
 def _missing_columns(engine: Engine, settings: Settings) -> dict[str, list[str]]:
     """Tables that exist but lack columns the models now declare.
 
-    This project has no migration tool, and ``create_all`` only creates missing
-    *tables* - it never alters an existing one. Without this check, adding a
-    column produces a confusing "no such column" error at the first query
-    instead of a clear message at startup.
+    After versioned migrations, unexplained missing tables/columns still refuse
+    startup instead of producing query failures or a destructive reset.
     """
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
@@ -106,6 +117,7 @@ def _missing_columns(engine: Engine, settings: Settings) -> dict[str, list[str]]
 
     for table_name, table in Base.metadata.tables.items():
         if table_name not in existing_tables:
+            drift[table_name] = ["table missing"]
             continue
         present = {column["name"] for column in inspector.get_columns(table_name)}
         missing = sorted({column.name for column in table.columns} - present)
@@ -117,25 +129,16 @@ def _missing_columns(engine: Engine, settings: Settings) -> dict[str, list[str]]
 
 
 def _resolve_schema_drift(engine: Engine, settings: Settings) -> None:
-    """Drop and recreate drifted tables in development, refuse elsewhere.
-
-    Demo data is disposable and is re-seeded on startup, so in development the
-    pragmatic answer is to rebuild. Outside development the data is not
-    disposable, so refuse to start and tell the operator what to migrate.
-    """
+    """Refuse unexplained schema drift in every environment, preserving data."""
     drift = _missing_columns(engine, settings)
     if not drift:
         return
 
     summary = "; ".join(f"{table}: {', '.join(columns)}" for table, columns in drift.items())
-    if not settings.is_development:
-        raise RuntimeError(
-            "Database schema is out of date and this build has no migrations. "
-            f"Missing columns -> {summary}. Migrate the database before starting."
-        )
-
-    logger.warning("schema_drift_detected rebuilding_tables=%s", summary)
-    Base.metadata.drop_all(bind=engine, tables=[Base.metadata.tables[name] for name in drift])
+    raise RuntimeError(
+        "Database schema differs from the migrated application schema. "
+        f"Missing columns -> {summary}. Back up and review migrations; startup will not delete data."
+    )
 
 
 def init_db(settings: Settings | None = None) -> None:
@@ -146,8 +149,13 @@ def init_db(settings: Settings | None = None) -> None:
     from app.db import models  # noqa: F401  (side-effect import)
 
     engine = get_engine(settings)
+    from app.db.migrations import require_current_schema, upgrade_database
+
+    if settings.is_production:
+        require_current_schema(engine)
+    else:
+        upgrade_database(engine)
     _resolve_schema_drift(engine, settings)
-    Base.metadata.create_all(bind=engine)
     logger.info("database_initialised url=%s", _safe_url(settings.database_url))
 
 

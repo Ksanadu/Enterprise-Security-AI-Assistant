@@ -13,6 +13,7 @@ email-validator>=2.2,<3               # pydantic EmailStr support
 SQLAlchemy>=2.0.35,<2.1
 
 # --- Security ---
+alembic>=1.20,<2                      # reviewed, versioned database migrations
 PyJWT>=2.9,<3
 bcrypt>=4.2,<5
 

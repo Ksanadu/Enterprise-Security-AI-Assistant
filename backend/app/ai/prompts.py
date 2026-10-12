@@ -87,10 +87,8 @@ def build_no_context_answer(*, role: Role, non_latin_question: bool = False) -> 
     """
     if non_latin_question:
         return (
-            "I can only search the English-language knowledge base at the moment, and "
-            "this question is not in English, so I could not look anything up. Please "
-            "ask again in English, or contact the IT service desk — see the Security "
-            "Contact Guide (KB-011)."
+            "知识库中没有足够相关的授权内容来回答这个问题。请联系 IT 服务台；"
+            "如果涉及安全事件，请立即联系安全团队。"
         )
     if role is Role.EMPLOYEE:
         return (

@@ -16,6 +16,12 @@ summary: >-
 
 # Security Contact Guide
 
+## 中文摘要：如何联系安全团队
+
+怀疑密码或验证码泄露、设备感染、设备丢失或数据外泄时，应立即联系安全团队；非工作时间使用安全热线。VPN 连接故障和权限申请交给 IT 服务台。
+
+报告应包含发生了什么、时间、应用或邮件、点击或输入等实际操作及观察到的异常，保留原始证据。安全团队不会索取密码或一次性验证码。本演示文档中的联系信息均为虚构占位内容。
+
 > **Simulated content.** Fictional sample documentation for a demonstration
 > system. All contact details below are fictional placeholders.
 

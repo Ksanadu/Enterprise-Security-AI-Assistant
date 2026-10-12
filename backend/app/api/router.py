@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.routes import auth, chat, dashboard, health, knowledge, tickets
+from app.api.routes import auth, chat, dashboard, health, knowledge, operations, tickets
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health.router)
@@ -17,5 +17,6 @@ api_router.include_router(knowledge.router)
 api_router.include_router(chat.router)
 api_router.include_router(tickets.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(operations.router)
 
 __all__ = ["api_router"]

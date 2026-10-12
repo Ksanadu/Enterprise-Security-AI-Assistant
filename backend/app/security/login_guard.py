@@ -67,7 +67,16 @@ class LoginGuard:
             or self._address.remaining(self._address_key(ip_address)) == 0
         )
 
-    def record_failure(self, *, email: str, ip_address: str | None) -> None:
+    def begin_attempt(self, *, email: str, ip_address: str | None) -> str | None:
+        if self.is_locked(email=email, ip_address=ip_address):
+            raise RateLimitError(
+                LOCKOUT_MESSAGE, details={"retry_after_seconds": int(self._lockout_seconds)}
+            )
+        return None
+
+    def record_failure(
+        self, *, email: str, ip_address: str | None, attempt_id: str | None = None
+    ) -> None:
         """Count a failed attempt."""
         for limiter, key in (
             (self._account, self._account_key(email)),
@@ -80,7 +89,9 @@ class LoginGuard:
                 # means "already counted", which is exactly the desired state.
                 logger.info("login_attempt_limit_reached key=%s", key.split(":", 1)[0])
 
-    def record_success(self, *, email: str, ip_address: str | None) -> None:
+    def record_success(
+        self, *, email: str, ip_address: str | None, attempt_id: str | None = None
+    ) -> None:
         """Clear the counters after a successful sign-in.
 
         Clearing the *account* counter is important: a user who mistypes a few

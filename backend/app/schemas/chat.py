@@ -8,6 +8,8 @@ influence either.
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -46,6 +48,8 @@ class MessagePayload(BaseModel):
     recommended_actions: list[str] = Field(default_factory=list)
     source_documents: list[SourceDocument] = Field(default_factory=list)
     grounded: bool = False
+    grounding_status: str = "unverified"
+    model_usage: dict[str, Any] = Field(default_factory=dict)
     provider: str = "none"
     model: str = "none"
     offline: bool = True
@@ -81,6 +85,12 @@ class MessagePayload(BaseModel):
     workflow_action: str = "none"
     #: The question the assistant is asking instead of filing (medium risk).
     clarifying_question: str | None = None
+    clarification_state: dict[str, str] | None = None
+    workflow_status: str = "not_required"
+    workflow_task_id: str | None = None
+    ticket_created: bool = False
+    requested_ticket_reference: str | None = None
+    reply_to_message_id: int | None = None
 
 
 class MessageOut(BaseModel):
@@ -118,6 +128,7 @@ class CreateConversationRequest(BaseModel):
 class PostMessageRequest(BaseModel):
     #: Bounded so an oversized prompt is rejected before it reaches the model.
     content: str = Field(min_length=1, max_length=4000)
+    client_request_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class PostMessageResponse(BaseModel):

@@ -16,6 +16,12 @@ summary: >-
 
 # Remote Work Security Policy
 
+## 中文摘要：远程办公安全
+
+远程办公访问内部系统时使用公司 VPN 和受管理设备；不要关闭终端保护或磁盘加密。公共网络无法连接 VPN 时，使用公司移动热点，不要无保护地访问内部系统。
+
+离开设备时锁屏，及时安装更新，屏幕共享前关闭机密内容。公司数据只能存放在批准的公司存储中，设备丢失或怀疑凭据泄露时立即报告。
+
 > **Simulated content.** Fictional sample documentation for a demonstration
 > system.
 

@@ -45,6 +45,8 @@ WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --chown=appuser:appuser app ./app
+COPY --chown=appuser:appuser alembic.ini ./alembic.ini
+COPY --chown=appuser:appuser migrations ./migrations
 COPY --chown=appuser:appuser knowledge_base ./knowledge_base
 
 # Mount point for the SQLite database and the vector index.
@@ -62,8 +64,8 @@ USER appuser
 EXPOSE 8000
 
 # Uses the interpreter rather than curl: curl is not in the slim image, and the
-# health endpoint is the application's own readiness signal.
+# /ready reflects knowledge and writable incident storage; /health is liveness.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD ["python", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4).getcode() == 200 else 1)"]
+    CMD ["python", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/ready', timeout=4).getcode() == 200 else 1)"]
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-server-header"]

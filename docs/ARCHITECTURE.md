@@ -1,12 +1,15 @@
 # Architecture
 
+> 2026-10-12 补充：当前另有持久化升级任务/聊天请求幂等、Alembic 版本、共享安全预算、通知 outbox、定时维护及 Security 运维状态接口。业务写入与外部模型/通知调用分开；工单与通知意图同事务，HTTP 由租约 worker 发送。当前实现及验收范围见 [PHASE_PROGRESS](PHASE_PROGRESS.md)、[OPS_MIGRATIONS](OPS_MIGRATIONS.md)、[OPS_NOTIFICATIONS](OPS_NOTIFICATIONS.md) 和 [OPS_MONITORING](OPS_MONITORING.md)。下方原架构说明不构成新阶段的全部验收。
+
 How the Enterprise Security AI Assistant is put together, and why.
 
 This document explains the decisions that are not obvious from the code. For how to run it, see
 the [README](../README.md); for the demonstration, see [DEMO.md](DEMO.md).
 
-**Everything in this system is simulated.** The knowledge base, the users, the tickets and the
-audit trail are fictional. No real enterprise data is used anywhere.
+**Repository knowledge fixtures and acceptance data are simulated.** This describes the prototype and isolated local drills; an operator-configured deployment may contain real data and must apply the documented access and retention controls.
+
+2026-10-13: schema 04 adds preservation holds and erased identity markers, filtered from normal ORM reads and aggregates. Approved retention runs through scheduled maintenance with verified pre-erasure backups; explicit account provisioning and two-artifact local rollback have actual isolated evidence. See [retention](OPS_RETENTION.md), [accounts](OPS_ACCOUNTS.md) and [release](OPS_RELEASE.md). Public TLS, formal supervision/recipients and production data policies remain unaccepted.
 
 ---
 

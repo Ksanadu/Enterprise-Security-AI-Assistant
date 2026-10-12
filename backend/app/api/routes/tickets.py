@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import CurrentUser, DbSession, client_ip
+from app.api.deps import CurrentUser, DbSession, client_ip, require_roles
 from app.core.enums import AuditOutcome, Role, Severity, TicketSource, TicketStatus
 from app.core.errors import NotFoundError, PermissionDeniedError, ValidationError
-from app.db.models import Ticket
+from app.core.time import iso_utc
+from app.db.models import Conversation, ManualTicketLink, Message, Ticket, User, WorkflowTask
 from app.schemas.ticket import (
     AddNoteRequest,
     CreateTicketRequest,
@@ -25,12 +28,77 @@ from app.schemas.ticket import (
     TicketSummary,
     UpdateTicketRequest,
 )
+from app.security.acknowledgment import is_human_response
 from app.security.audit import AuditAction, record_audit
 from app.services.ticket_service import TicketService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
+
+
+def task_out(task: WorkflowTask) -> dict:
+    return {
+        "id": task.id,
+        "status": task.status,
+        "attempts": task.attempts,
+        "risk_level": task.snapshot["risk_level"],
+        "ticket_reference": task.ticket_reference,
+        "error_code": task.error_code,
+        "created_at": iso_utc(task.created_at),
+    }
+
+
+@router.get("/workflows", summary="Pending incident work (security only)")
+def workflows(
+    request: Request,
+    session: DbSession,
+    user: User = Depends(require_roles(Role.SECURITY)),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    del request, user
+    tasks = session.scalars(
+        select(WorkflowTask)
+        .where(WorkflowTask.status != "completed")
+        .order_by(WorkflowTask.created_at)
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    total = (
+        session.scalar(
+            select(func.count()).select_from(WorkflowTask).where(WorkflowTask.status != "completed")
+        )
+        or 0
+    )
+    return {
+        "tasks": [task_out(task) for task in tasks],
+        "pending": total,
+        "next_offset": offset + len(tasks) if offset + len(tasks) < total else None,
+    }
+
+
+@router.post("/workflows/{task_id}/retry", summary="Retry persisted incident work (security only)")
+def retry_workflow(
+    task_id: str,
+    request: Request,
+    session: DbSession,
+    user: User = Depends(require_roles(Role.SECURITY)),
+):
+    from app.api.routes.chat import get_chat_service
+
+    task = get_chat_service(request).workflow_tasks.retry(session, task_id)
+    record_audit(
+        session,
+        action="workflow.retry",
+        actor=user,
+        resource_type="workflow_task",
+        resource_id=task.id,
+        detail={"status": task.status, "attempts": task.attempts},
+        commit=True,
+    )
+    return task_out(task)
+
 
 #: Which team a self-raised ticket goes to, by the raiser's role. Used when the
 #: category does not name a security matter.
@@ -44,7 +112,16 @@ OWNER_ROLE_FOR_RAISER: dict[Role, Role] = {
 #: `security` for anything that is not an IT request, and `phishing`/`incident`
 #: when the assistant classified the message that way.
 SECURITY_CATEGORIES = frozenset(
-    {"security", "incident", "phishing", "malware", "ransomware", "data_leak", "data_loss", "access"}
+    {
+        "security",
+        "incident",
+        "phishing",
+        "malware",
+        "ransomware",
+        "data_leak",
+        "data_loss",
+        "access",
+    }
 )
 
 #: Severity for a ticket a user raises themselves. Deliberately never high or
@@ -67,7 +144,7 @@ def get_ticket_service(request: Request) -> TicketService:
 
 
 def _iso(value: object) -> str | None:
-    return value.isoformat() if hasattr(value, "isoformat") else None
+    return iso_utc(value)
 
 
 def to_summary(ticket: Ticket) -> TicketSummary:
@@ -106,6 +183,17 @@ def list_tickets(
         limit=limit,
         offset=offset,
     )
+    has_more = len(tickets) == limit and bool(
+        service.list_visible(
+            session,
+            user=user,
+            status=status_filter,
+            severity=severity,
+            owner_role=owner_role,
+            limit=1,
+            offset=offset + limit,
+        )
+    )
     record_audit(
         session,
         action=AuditAction.TICKET_LISTED,
@@ -119,6 +207,7 @@ def list_tickets(
         count=len(tickets),
         statistics=service.statistics(session, user=user),
         tickets=[to_summary(ticket) for ticket in tickets],
+        next_offset=offset + limit if has_more else None,
     )
 
 
@@ -167,6 +256,27 @@ def create_ticket(
     is_security = category in SECURITY_CATEGORIES
     owner_role = Role.SECURITY if is_security else OWNER_ROLE_FOR_RAISER[user.role]
 
+    if payload.message_id is not None:
+        message = session.scalar(
+            select(Message)
+            .join(Conversation)
+            .where(
+                Message.id == payload.message_id,
+                Conversation.user_id == user.id,
+                Message.role == "assistant",
+            )
+        )
+        if message is None:
+            raise NotFoundError("Message not found.")
+        existing = session.scalar(
+            select(Ticket).join(ManualTicketLink).where(ManualTicketLink.message_id == message.id)
+        )
+        auto_reference = (message.payload or {}).get("ticket_reference")
+        if existing is None and auto_reference:
+            existing = service.get_visible(session, user=user, reference=auto_reference)
+        if existing is not None:
+            return _detail(service, session, existing, user=user)
+
     ticket = service.create_ticket(
         session,
         title=payload.title,
@@ -179,12 +289,10 @@ def create_ticket(
         created_by=user,
         escalation_required=False,
         automated=False,
-        note=(
-            "Raised by the user as a security report."
-            if is_security
-            else "Raised by the user."
-        ),
+        note=("Raised by the user as a security report." if is_security else "Raised by the user."),
     )
+    if payload.message_id is not None:
+        session.add(ManualTicketLink(message_id=payload.message_id, ticket_id=ticket.id))
     record_audit(
         session,
         action=AuditAction.TICKET_CREATED,
@@ -198,8 +306,22 @@ def create_ticket(
             "severity": ticket.severity.value,
         },
         ip_address=client_ip(request),
-        commit=True,
+        commit=False,
     )
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        if payload.message_id is None:
+            raise
+        existing = session.scalar(
+            select(Ticket)
+            .join(ManualTicketLink)
+            .where(ManualTicketLink.message_id == payload.message_id)
+        )
+        if existing is None:
+            raise
+        return _detail(service, session, existing, user=user)
     return _detail(service, session, ticket, user=user)
 
 
@@ -328,11 +450,13 @@ def _detail(
     service: TicketService, session: DbSession, ticket: Ticket, *, user: CurrentUser
 ) -> TicketDetail:
     summary = to_summary(ticket)
+    timeline = service.timeline(session, ticket)
     return TicketDetail(
         **summary.model_dump(),
         description=ticket.description,
         related_query=ticket.related_query,
         can_update=service.can_update(user=user, ticket=ticket),
+        human_acknowledged=any(is_human_response(event) for event in timeline),
         events=[
             TicketEventOut(
                 id=event.id,
@@ -346,6 +470,6 @@ def _detail(
                 automated=event.automated,
                 note=event.note,
             )
-            for event in service.timeline(session, ticket)
+            for event in timeline
         ],
     )

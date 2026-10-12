@@ -270,7 +270,7 @@ export function Dashboard({
         {audit === null || audit.entries.length === 0 ? (
           <p className="dash-card__hint">No audit entries match.</p>
         ) : (
-          <table className="audit">
+          <div className="audit__scroll" aria-label="Scrollable audit table" tabIndex={0}><table className="audit">
             <thead>
               <tr>
                 <th scope="col">When</th>
@@ -293,7 +293,7 @@ export function Dashboard({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
         <p className="dash-card__hint">
           Showing {audit?.entries.length ?? 0} of {audit?.total ?? 0} entries. Audit detail is recorded

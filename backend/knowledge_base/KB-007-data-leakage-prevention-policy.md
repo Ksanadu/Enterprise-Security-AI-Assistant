@@ -16,6 +16,12 @@ summary: >-
 
 # Data Leakage Prevention Policy
 
+## 中文摘要：数据分类与泄露报告
+
+公司数据分为公开、内部、机密和受限四级。机密数据的外部共享需要数据所有者批准、访问期限和受保护的共享链接；受限数据不得发送到邮件、聊天或个人存储。
+
+怀疑数据泄露时保留邮件、链接或设备证据，立即向安全团队报告文件、记录数量、接收者和时间，不要擅自删除证据或联系接收方。个人数据的处理应遵循最小化和保留期限要求。
+
 > **Simulated content.** Fictional sample documentation for a demonstration
 > system.
 

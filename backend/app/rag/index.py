@@ -159,6 +159,8 @@ class KnowledgeIndex:
                 str(self._settings.rag_chunk_overlap_chars),
                 self._store.name,
                 str(host if host is not None else ""),
+                self._settings.embedding_model,
+                self._settings.embedding_base_url or self._settings.llm_base_url,
             ]
         )
 

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { useChat } from '../hooks/useChat'
 import { useDashboard } from '../hooks/useDashboard'
@@ -9,6 +9,9 @@ import { ConversationSidebar, SessionBar } from './ConversationSidebar'
 import { Dashboard } from './Dashboard'
 import { MessageThread } from './MessageThread'
 import { TicketBoard } from './TicketBoard'
+import { WorkflowQueue } from './WorkflowQueue'
+import { DemoGuide } from './DemoGuide'
+import { NotificationQueue } from './NotificationQueue'
 
 export interface ChatWorkspaceProps {
   user: UserPublic
@@ -19,7 +22,9 @@ export interface ChatWorkspaceProps {
 type Tab = 'chat' | 'tickets' | 'dashboard'
 
 export function ChatWorkspace({ user, onSignOut, maxMessageLength = 2000 }: ChatWorkspaceProps) {
-  const [tab, setTab] = useState<Tab>('chat')
+  const [requestedTicket] = useState(() => new URLSearchParams(window.location.search).get('ticket'))
+  const [tab, setTab] = useState<Tab>(requestedTicket ? 'tickets' : 'chat')
+  const [suggestion, setSuggestion] = useState<{ text: string; id: number } | null>(null)
 
   // Stable identity: the hooks hold this in a ref, but an inline arrow would
   // still churn the dependency chain on every render.
@@ -29,6 +34,10 @@ export function ChatWorkspace({ user, onSignOut, maxMessageLength = 2000 }: Chat
   )
   const chat = useChat(handleUnauthorized)
   const tickets = useTickets(handleUnauthorized, tab === 'tickets')
+  const openTicket = tickets.open
+  useEffect(() => {
+    if (requestedTicket) void openTicket(requestedTicket)
+  }, [requestedTicket, openTicket])
   const dashboard = useDashboard(handleUnauthorized, tab === 'dashboard')
 
   const busy = chat.status === 'loading' || chat.status === 'sending'
@@ -85,6 +94,8 @@ export function ChatWorkspace({ user, onSignOut, maxMessageLength = 2000 }: Chat
   return (
     <div className="workspace">
       <SessionBar user={user} capabilities={chat.capabilities} onSignOut={() => onSignOut()} />
+      {tab === 'chat' && chat.capabilities?.demo_enabled && <DemoGuide capabilities={chat.capabilities}
+        messages={chat.messages} role={user.role} onExample={(text) => setSuggestion({ text, id: Date.now() })} />}
 
       <nav className="tabs" aria-label="Sections">
         <button
@@ -130,6 +141,7 @@ export function ChatWorkspace({ user, onSignOut, maxMessageLength = 2000 }: Chat
             {chat.error && (
               <div className="alert alert--error" role="alert">
                 <span>{chat.error}</span>
+                {chat.canRetry && <button className="button button--ghost" onClick={() => void chat.retry()} disabled={busy}>Retry message</button>}
                 <button type="button" className="alert__dismiss" onClick={chat.dismissError}>
                   Dismiss
                 </button>
@@ -156,6 +168,7 @@ export function ChatWorkspace({ user, onSignOut, maxMessageLength = 2000 }: Chat
               sending={chat.status === 'sending'}
               maxLength={maxMessageLength}
               onSend={chat.send}
+              suggestion={suggestion}
             />
           </main>
         </div>
@@ -163,6 +176,8 @@ export function ChatWorkspace({ user, onSignOut, maxMessageLength = 2000 }: Chat
 
       {tab === 'tickets' && (
         <main className="panel panel--wide">
+          {user.role === 'security' && <WorkflowQueue onRecovered={() => void tickets.refresh()} />}
+          {user.role === 'security' && <NotificationQueue onUnauthorized={handleUnauthorized} onOpen={(reference) => void tickets.open(reference)} />}
           {tickets.error && (
             <div className="alert alert--error" role="alert">
               <span>{tickets.error}</span>
@@ -182,6 +197,8 @@ export function ChatWorkspace({ user, onSignOut, maxMessageLength = 2000 }: Chat
             onClose={tickets.close}
             onChangeStatus={(status, note) => void tickets.changeStatus(status, note)}
             onAddNote={(note) => void tickets.addNote(note)}
+            onRefresh={() => void tickets.refresh()}
+            onLoadMore={() => void tickets.loadMore()}
           />
         </main>
       )}

@@ -17,6 +17,12 @@ summary: >-
 
 # Password Policy
 
+## 中文摘要：密码要求
+
+公司标准账号的密码至少需要 14 个字符，企业密码应包含小写字母、大写字母、数字和符号中的至少三类。密码不能包含用户名、员工姓名或公司名称，不能与个人账号重复使用。
+
+公司密码策略要求使用批准的密码管理器生成和保存独立密码。不要在纸上、明文文件或聊天中保存密码，也不要与同事共享密码。怀疑密码泄露时，应立即从可信设备更改密码、退出全部会话，并向安全团队报告。
+
 > **Simulated content.** This is fictional sample documentation created for a
 > demonstration system. It does not describe any real organisation.
 

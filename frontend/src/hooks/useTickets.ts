@@ -16,6 +16,7 @@ export interface UseTicketsResult {
   changeStatus: (status: TicketStatus, note: string) => Promise<void>
   addNote: (note: string) => Promise<void>
   refresh: () => Promise<void>
+  loadMore: () => Promise<void>
   dismissError: () => void
 }
 
@@ -59,9 +60,26 @@ export function useTickets(onUnauthorized: () => void, enabled: boolean): UseTic
     }
   }, [handleFailure, statusFilter])
 
+  const loadMore = useCallback(async () => {
+    const offset = listing?.next_offset
+    if (offset == null || loading) return
+    setLoading(true)
+    try {
+      const next = await api.tickets.list({ ...(statusFilter ? { status: statusFilter } : {}), offset })
+      setListing((previous) => previous ? {
+        ...next,
+        tickets: [...previous.tickets, ...next.tickets.filter((ticket) => !previous.tickets.some((old) => old.reference === ticket.reference))],
+      } : next)
+    } catch (cause) {
+      handleFailure(cause, 'Could not load more tickets.')
+    } finally { setLoading(false) }
+  }, [listing, loading, statusFilter, handleFailure])
+
   useEffect(() => {
     if (!enabled) return
     void refresh()
+    const timer = window.setInterval(() => { if (!document.hidden) void refresh() }, 15000)
+    return () => window.clearInterval(timer)
   }, [enabled, refresh])
 
   const open = useCallback(
@@ -130,6 +148,7 @@ export function useTickets(onUnauthorized: () => void, enabled: boolean): UseTic
     changeStatus,
     addNote,
     refresh,
+    loadMore,
     dismissError,
   }
 }

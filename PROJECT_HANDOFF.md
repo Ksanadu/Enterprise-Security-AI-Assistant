@@ -1,6 +1,12 @@
 # PROJECT HANDOFF — Enterprise Security AI Assistant
 
-**Handoff date:** end of Phase 10 (all ten phases complete)
+> 2026-10-12 实施补充：本文件下方的 Phase 10 完成、测试数字及 Docker 启动声明为原版本历史。当前正在执行新 Phase 0–8；Phase 7 和最终交付尚未结项。Docker 实际全链路、真实 LLM/Embedding 及新的独立质量验收尚未通过，不能从原版本记录推断已完成。当前依据为 [分阶段记录](docs/PHASE_PROGRESS.md)、[迁移运维](docs/OPS_MIGRATIONS.md)、[通知](docs/OPS_NOTIFICATIONS.md) 和 [监控](docs/OPS_MONITORING.md)。生产先备份/迁移，配置 HTTPS 通知接收端及正式账号，不能直接把原型库切成生产环境。
+
+**Historical handoff:** end of the original implementation Phase 10; this is not the current improvement sign-off.
+
+2026-10-13 新增实施入口：[正式账号](docs/OPS_ACCOUNTS.md)、[数据保留/保全](docs/OPS_RETENTION.md)。它们只在隔离模拟库验收；现有业务库和 `.env` 未改。发布包校验与实际 A/B 回滚仍以最新分阶段记录为准。
+
+当前交接依据为 [Phase 8 当前交付记录](docs/PHASE8_HANDOFF.md) 和 [机器验收映射](docs/PHASE8_ACCEPTANCE.json)。本文件保留原实现历史；不能依据下方旧签收表推断 Docker/真实模型/独立质量或正式部署已经通过。
 **Repository:** `git@github.com:Ksanadu/enterprise-security-ai-assistant.git`, branch `main`
 **Audience:** the engineer who inherits this codebase. This document assumes you have never
 seen the project and have one working day to become productive in it.
@@ -453,7 +459,7 @@ That is the single highest-value thing to do in your first week (§12).
 ## 6. Implemented functionality, mapped to the phases
 
 Spec §11 prescribed the phase order; §11's own rule was *run tests → check functionality → fix
-errors → update README → only then proceed*. All ten phases are complete.
+errors → update README → only then proceed*. The following table records the original implementation, not the current final acceptance. See [current matrix](docs/ACCEPTANCE_MATRIX.md).
 
 | Phase | Scope | Delivered |
 | --- | --- | --- |
@@ -884,16 +890,12 @@ once already.
 
 ### 10.4 Still open on the security side
 
-- **Per-process rate limiting and lockout** wear down under multiple workers (§8.2). The limiter
-  now covers both expensive endpoints (chat and `/knowledge/search`), but the storage is still
-  in-process.
+- **Historical per-process limits** were replaced by shared persisted SQLite budgets in October. Multiple-process admission and lockout continuity have local evidence; formal load/scale limits remain pending.
 - **No penetration test, no fuzzing campaign, no third-party review** has been done. The 1110
   security-marked tests are the developer's own and share the developer's blind spots. The
   independent review that found the two P0 defects is `Reviewer Report.md`; most of its findings
   are now fixed (see `PROJECT_STATUS.md` for the round-by-round record).
-- **No data-retention policy is implemented** beyond `AUTH_SESSION_RETENTION_DAYS`. Real employee
-  reports would need a documented retention and deletion story. Audit rows store the actor's
-  email, which is deliberate for triage and is personal data in an append-only log.
+- **Business retention and preservation now have an implementation**, verified backups and actual scheduled/CLI execution in isolated data. Real policy approval, identity/governance retention, encryption/ACLs and external backup/receiver copies remain deployment requirements; see [retention](docs/OPS_RETENTION.md).
 - **Closed during the stabilization pass, kept here so the invariant is not forgotten:**
   BUG-1 (a possible account compromise could be neither classified nor escalated) and BUG-2 (a
   medium-risk report could be lost) are fixed; the AI-stack fingerprint is no longer readable

@@ -42,6 +42,7 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const payload = message.payload
+  const requestedReference = raisedReference || payload?.requested_ticket_reference
 
   // A ticket the user asks for, as opposed to the one the backend raises by
   // itself for a high-risk event. Offered when the assistant answered without
@@ -51,10 +52,10 @@ export function MessageBubble({
     !isUser &&
     Boolean(onRaiseTicket) &&
     Boolean(payload) &&
-    payload?.grounded === true &&
+    (payload?.grounded === true || (payload?.source_documents.length ?? 0) > 0) &&
     payload?.blocked !== true &&
     !payload?.ticket_reference &&
-    !raisedReference
+    !requestedReference && payload?.workflow_status !== 'pending'
 
   return (
     <article className={`bubble ${isUser ? 'bubble--user' : 'bubble--assistant'}`}>
@@ -66,12 +67,13 @@ export function MessageBubble({
               ? 'request refused'
               : payload.grounded
                 ? 'grounded in the knowledge base'
-                : 'no matching document'}
+                : 'answer not verified against sources'}
           </span>
         )}
       </header>
 
       <div className="bubble__body">
+        {payload?.provider === 'offline-fallback' && <p className="alert alert--info" role="status">模型服务不可用，本次回答已降级为离线知识摘录。</p>}
         <AnswerText content={message.content} />
       </div>
 
@@ -86,20 +88,23 @@ export function MessageBubble({
         </p>
       )}
 
-      {raisedReference && (
+      {requestedReference && (
         <p className="ticket-chip ticket-chip--requested" role="status">
           <span className="ticket-chip__label">Ticket raised at your request</span>
-          <code className="ticket-chip__ref">{raisedReference}</code>
+          <code className="ticket-chip__ref">{requestedReference}</code>
         </p>
       )}
 
-      {payload?.workflow_action === 'clarify' && payload.clarifying_question && (
+      {payload?.clarifying_question && (
         <section className="clarify" aria-label="More information needed">
           <h3 className="clarify__title">One more detail needed</h3>
           <p className="clarify__text">{payload.clarifying_question}</p>
           <p className="clarify__note">
-            Nothing has been filed yet. Your answer decides whether this needs the security
-            team.
+            {payload.ticket_reference
+              ? 'A ticket is already filed. Your answer will update the assessment of this event.'
+              : payload.workflow_status === 'pending'
+                ? 'Your report is saved and ticket submission is pending retry. Your answer helps assess urgency.'
+                : 'Please clarify these facts so the security team can assess the event.'}
           </p>
         </section>
       )}
@@ -127,6 +132,8 @@ export function MessageBubble({
           intent={payload.intent}
           signals={payload.risk_signals}
           escalation={payload.human_escalation}
+          submitted={Boolean(payload.ticket_reference)}
+          pending={payload.workflow_status === 'pending'}
         />
       )}
 

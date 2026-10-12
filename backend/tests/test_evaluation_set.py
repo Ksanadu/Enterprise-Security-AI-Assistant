@@ -136,7 +136,7 @@ class Pipeline:
 
 
 @pytest.fixture(scope="module")
-def evaluation(request) -> Pipeline:
+def evaluation(request, tmp_path_factory) -> Pipeline:
     """Run the whole set once and share the results across the assertions.
 
     Module-scoped because running 40 questions through the API is the expensive
@@ -165,6 +165,7 @@ def evaluation(request) -> Pipeline:
         "LLM_PROVIDER": "mock",
         "EMBEDDING_PROVIDER": "tfidf",
         "VECTOR_STORE": "memory",
+        "VECTOR_STORE_PATH": str(tmp_path_factory.mktemp("evaluation-vector-cache")),
         "RETRIEVAL_TOP_K": "6",
         "RETRIEVAL_MIN_SCORE": "0.05",
         "RETRIEVAL_RELATIVE_FLOOR": "0.5",
