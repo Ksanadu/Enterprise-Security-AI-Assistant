@@ -106,6 +106,14 @@ def check_browser(url: str, output: Path) -> dict:
                     completed("multi_turn_same_ticket_escalation")
 
                     current_check = f"{layout}:layout"
+                    result.setdefault("layout", {})[layout] = page.evaluate(
+                        "({viewport: document.documentElement.clientWidth, "
+                        "scroll: document.documentElement.scrollWidth, "
+                        "overflow: Array.from(document.querySelectorAll('body *'))"
+                        ".filter(e => e.getBoundingClientRect().right > document.documentElement.clientWidth + 1)"
+                        ".slice(0, 12).map(e => ({tag: e.tagName, class: e.className, "
+                        "right: Math.round(e.getBoundingClientRect().right)}))})"
+                    )
                     assert page.evaluate(
                         "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
                     ), "Horizontal page overflow"
