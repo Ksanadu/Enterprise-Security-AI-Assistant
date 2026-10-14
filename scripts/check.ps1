@@ -43,7 +43,7 @@ if (-not (Test-Path $venvPython)) {
 
 Invoke-Step 'backend: ruff'      (Join-Path $root 'backend')  "& '$venvPython' -m ruff check app tests migrations scripts"
 Invoke-Step 'backend: mypy'      (Join-Path $root 'backend')  "& '$venvPython' -m mypy app"
-Invoke-Step 'ops: ruff'          (Join-Path $root 'backend')  "& '$venvPython' -m ruff check ../scripts/ops-backup.py ../scripts/ops-backup-drill.py ../scripts/ops-pilot-drill.py ../scripts/ops-monitor.py ../scripts/ops-release.py ../scripts/ops-release-drill.py ../scripts/phase8-delivery.py ../scripts/container-acceptance.py"
+Invoke-Step 'ops: ruff'          (Join-Path $root 'backend')  "& '$venvPython' -m ruff check ../scripts/ops-backup.py ../scripts/ops-backup-drill.py ../scripts/ops-pilot-drill.py ../scripts/ops-monitor.py ../scripts/ops-release.py ../scripts/ops-release-drill.py ../scripts/phase8-delivery.py ../scripts/container-acceptance.py ../scripts/container_browser_acceptance.py"
 # `--junit-xml` is written on failure as well as success, so a red run leaves a
 # machine-readable record of *which* test failed and why. That matters because a
 # runner's job log needs repository admin rights to read through the API: without

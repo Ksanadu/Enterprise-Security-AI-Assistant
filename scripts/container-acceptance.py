@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from contextlib import suppress
 from pathlib import Path
 
 import httpx
@@ -96,7 +97,7 @@ def check_api(url: str) -> tuple[str, int]:
         return employee["Authorization"], cid
 
 
-def run(output: Path) -> None:
+def run(output: Path, *, browser: bool = False) -> None:
     docker_binary = shutil.which("docker")
     if not docker_binary:
         raise RuntimeError("Docker CLI/engine unavailable; actual container acceptance cannot run")
@@ -199,6 +200,10 @@ def run(output: Path) -> None:
                 url = f"http://127.0.0.1:{http_port}"
                 wait_ready(url)
                 bearer, cid = check_api(url)
+                if browser:
+                    from container_browser_acceptance import check_browser
+
+                    stage["browser"] = check_browser(url, output / (project + "-browser"))
                 command("restart", "backend")
                 wait_ready(url)
                 with httpx.Client(base_url=url, trust_env=False, timeout=10) as client:
@@ -219,6 +224,66 @@ def run(output: Path) -> None:
                         )
                     result.raise_for_status()
                     assert len(result.json()["messages"]) == 6
+                (snapshot / "acceptance.override.yml").write_text(
+                    f"services:\n  backend:\n    image: {project}-backend:local\n    volumes:\n      - app-data:/app/data:ro\n  frontend:\n    image: {project}-frontend:local\n",
+                    encoding="utf-8",
+                )
+                command("up", "--detach", "--no-deps", "backend")
+                container_id = subprocess.run(  # noqa: S603 -- this run's fixed Compose project
+                    [*compose, "ps", "--all", "--quiet", "backend"],
+                    cwd=snapshot,
+                    env=env,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+                mounts = subprocess.run(  # noqa: S603 -- inspected ID returned by this run's Compose project
+                    [docker_binary, "inspect", container_id, "--format", "{{json .Mounts}}"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout
+                assert any(
+                    mount["Destination"] == "/app/data" and mount["RW"] is False
+                    for mount in json.loads(mounts)
+                )
+                with httpx.Client(base_url=url, trust_env=False, timeout=5) as client:
+                    for _ in range(3):
+                        # A refused connection is unavailable, never ready.
+                        with suppress(httpx.HTTPError):
+                            assert client.get("/api/v1/ready").status_code != 200
+                        time.sleep(1)
+                stage["read_only_volume"] = "verified_read_only_mount_and_not_ready"
+                command("logs", "--no-color", "--tail", "80", "backend")
+
+                (snapshot / "acceptance.override.yml").write_text(
+                    f"services:\n  backend:\n    image: {project}-backend:local\n    volumes:\n      - app-data:/app/data:rw\n    environment:\n      LLM_PROVIDER: openai_compatible\n      LLM_API_KEY: synthetic-unavailable-container-model\n      LLM_BASE_URL: http://127.0.0.1:1/v1\n      LLM_TIMEOUT_SECONDS: '1'\n      LLM_MAX_RETRIES: '0'\n  frontend:\n    image: {project}-frontend:local\n",
+                    encoding="utf-8",
+                )
+                command("up", "--detach", "--no-deps", "backend")
+                wait_ready(url)
+                with httpx.Client(base_url=url, trust_env=False, timeout=30) as client:
+                    auth = client.post(
+                        "/api/v1/auth/login",
+                        json={"email": "employee@example.com", "password": "Demo@12345"},
+                    )
+                    auth.raise_for_status()
+                    headers = {"Authorization": "Bearer " + auth.json()["access_token"]}
+                    created = client.post("/api/v1/chat/conversations", headers=headers, json={})
+                    created.raise_for_status()
+                    incident = client.post(
+                        f"/api/v1/chat/conversations/{created.json()['id']}/messages",
+                        headers=headers,
+                        json={
+                            "content": "I entered my password on a phishing page.",
+                            "client_request_id": "model-down",
+                        },
+                    )
+                    incident.raise_for_status()
+                    payload = incident.json()["assistant_message"]["payload"]
+                    assert payload["ticket_reference"] and payload["human_escalation"]
+                    assert payload["provider"] == "offline-fallback" and payload["offline"]
+                stage["model_failure"] = "offline_fallback_and_high_risk_ticket_verified"
                 (snapshot / "acceptance.override.yml").write_text(
                     f"services:\n  backend:\n    image: {project}-backend:local\n    environment:\n      KB_DIR: /app/data/synthetic-missing-kb\n  frontend:\n    image: {project}-frontend:local\n",
                     encoding="utf-8",
@@ -274,6 +339,9 @@ def run(output: Path) -> None:
                     "RBAC",
                     "human acknowledgment",
                     "restart persistence",
+                    "read-only volume not ready",
+                    "writable volume recovery",
+                    "unreachable model fallback and incident persistence",
                     "KB-failure readiness",
                     "KB-failure incident persistence",
                 ]
@@ -296,4 +364,8 @@ def run(output: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=ROOT / "logs" / "container-acceptance")
-    run(parser.parse_args().output.resolve())
+    parser.add_argument(
+        "--browser", action="store_true", help="Require actual Chromium UI acceptance"
+    )
+    arguments = parser.parse_args()
+    run(arguments.output.resolve(), browser=arguments.browser)
