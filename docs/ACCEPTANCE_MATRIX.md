@@ -1,6 +1,6 @@
 # 最终验收矩阵（Phase 8 本地交付，最终验收待完成）
 
-> 2026-10-14 已开始 [最终验收](FINAL_ACCEPTANCE.md)。本轮结果与历史证据分开记录，新增容器浏览器实际检查；执行准备不等于已经通过。
+> 2026-10-14 [本轮可执行验收](FINAL_ACCEPTANCE.md) 已完成。最新机器结果为 [FINAL_ACCEPTANCE.json](FINAL_ACCEPTANCE.json)：工程、两配置容器浏览器和选定卷/模型故障通过；扩展质量意图门禁failed。外部API仅留接口、正式部署与独立审阅按用户要求暂缓。下方 Phase8机器JSON与本地交付表保留历史范围，不能代替最新结果。
 
 2026-10-13。状态：尚未最终签收；本地标准已映射到代码、检查与证据。机器映射为 [PHASE8_ACCEPTANCE.json](PHASE8_ACCEPTANCE.json)，交付/恢复和外部门禁关闭条件见 [PHASE8_HANDOFF.md](PHASE8_HANDOFF.md)。工程测试通过不能替代 Docker、真实供应商、质量审阅及生产部署验收。
 

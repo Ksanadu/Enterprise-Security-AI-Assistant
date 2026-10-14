@@ -1,0 +1,352 @@
+{
+  "version": 1,
+  "date": "2026-10-14",
+  "scope": "executable offline prototype acceptance; live API integration deferred by user",
+  "code_commit": "a194860c947fc31bc1ad12bf2c25549f231f03d6",
+  "execution_complete": true,
+  "signed_off": false,
+  "overall_status": "executable_acceptance_completed_quality_gate_failed",
+  "local": {
+    "targeted_tests": {
+      "collected": 166,
+      "skipped": 8,
+      "failures": 0,
+      "passed": 158
+    },
+    "offline_models": {
+      "status": "passed",
+      "case_count": 40,
+      "maximum_network_attempts": 0,
+      "metrics": {
+        "intent": 1.0,
+        "risk": 1.0,
+        "escalation": 1.0,
+        "ticket": 1.0,
+        "blocking": 1.0,
+        "rbac": 1.0,
+        "retrieval": 1.0
+      }
+    },
+    "demo": {
+      "status": "passed",
+      "checks": 71
+    },
+    "quality": {
+      "dataset_sha256": "5c187684ac43ed5e5199bfa8e4ea61d1003355b2e0e42966d794f5d6c90097e2",
+      "purpose": "regression",
+      "status": "failed",
+      "single_turn_count": 115,
+      "multi_turn_count": 10,
+      "metrics": {
+        "intent_accuracy": 0.9478260869565217,
+        "risk_accuracy": 1.0,
+        "retrieval_recall_at_k": 0.9333333333333333,
+        "high_risk_delivery_recall": 1.0,
+        "benign_high_false_positive_rate": 0.0,
+        "rbac_violations": 0,
+        "blocking_accuracy": 1.0,
+        "multi_turn_accuracy": 1.0
+      }
+    },
+    "pilot": {
+      "status": "passed",
+      "migration_revision": "20261013_04",
+      "checks": [
+        "operator_migration",
+        "demo_disabled",
+        "only_provisioned_users",
+        "failure_recorded_as_pending",
+        "backup_restore",
+        "session_survives_restore",
+        "actual_worker_recovers_after_restore",
+        "one_ticket_after_retry",
+        "history_state_updates",
+        "rbac_survives_restore",
+        "business_readiness",
+        "restored_notification_worker_delivery"
+      ]
+    },
+    "backup-restore": {
+      "status": "passed",
+      "checks": [
+        "committed_WAL",
+        "schema_and_row_counts",
+        "pending_workflow_survives",
+        "ticket_reference_survives",
+        "existing_database_unchanged",
+        "tampered_backup_refused"
+      ],
+      "note": "The backup was deliberately tampered with after successful restore; do not reuse it. Production backup directory ACLs, signing secrets, migration/rollback and restore startup still require separate acceptance."
+    },
+    "release-rollback-corrected": {
+      "status": "passed",
+      "checks": [
+        "distinct_verified_artifacts",
+        "a_actual_api",
+        "frozen_writes",
+        "candidate_operator_migration",
+        "candidate_readiness_failure",
+        "restore_to_fresh_file",
+        "old_build_restarted",
+        "old_sessions_preserved",
+        "rbac_preserved",
+        "unique_pending_ticket_recovered",
+        "history_repaired",
+        "receiver_replay_deduplicated"
+      ]
+    },
+    "backup_restore": {
+      "status": "passed",
+      "scope": "SQLite backup/restore drill; simulated ESAA data only",
+      "checks": [
+        "committed_WAL",
+        "schema_and_row_counts",
+        "pending_workflow_survives",
+        "ticket_reference_survives",
+        "existing_database_unchanged",
+        "tampered_backup_refused"
+      ],
+      "note": "The backup was deliberately tampered with after successful restore; do not reuse it. Production backup directory ACLs, signing secrets, migration/rollback and restore startup still require separate acceptance."
+    },
+    "final_document_tests": {
+      "passed": 27,
+      "skipped": 1,
+      "failures": 0
+    }
+  },
+  "deferred_by_user": [
+    "live_llm_and_embedding",
+    "formal_deployment",
+    "independent_annotation_and_answer_review"
+  ],
+  "known_quality_failure": "frozen v1 intent accuracy 109/115 < 0.95; preserve labels, thresholds and failure evidence",
+  "github": {
+    "head_sha": "a194860c947fc31bc1ad12bf2c25549f231f03d6",
+    "runs": [
+      {
+        "id": 38501132160,
+        "name": "Container acceptance",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/Ksanadu/Enterprise-Security-AI-Assistant/actions/runs/38501132160",
+        "event": "workflow_dispatch",
+        "head_sha": "a194860c947fc31bc1ad12bf2c25549f231f03d6",
+        "jobs": [
+          {
+            "id": 115648097957,
+            "name": "compose",
+            "status": "completed",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "id": 38501131163,
+        "name": "CI",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/Ksanadu/Enterprise-Security-AI-Assistant/actions/runs/38501131163",
+        "event": "push",
+        "head_sha": "a194860c947fc31bc1ad12bf2c25549f231f03d6",
+        "jobs": [
+          {
+            "id": 115648091664,
+            "name": "check.ps1 (ruff, mypy, pytest+cov, tsc, eslint, vitest+cov, secret scan)",
+            "status": "completed",
+            "conclusion": "success"
+          }
+        ]
+      }
+    ]
+  },
+  "engineering": {
+    "status": "passed",
+    "backend_passed": 1813,
+    "backend_skipped": 0,
+    "backend_coverage": 94.88,
+    "frontend_passed": 81
+  },
+  "container": {
+    "configurations": [
+      {
+        "configuration": "no .env",
+        "status": "passed",
+        "browser_status": "passed",
+        "layout": {
+          "desktop": {
+            "viewport": 1440,
+            "scroll": 1440,
+            "overflow": []
+          },
+          "mobile": {
+            "viewport": 390,
+            "scroll": 390,
+            "overflow": []
+          }
+        },
+        "read_only_volume": "verified_read_only_mount_and_not_ready",
+        "model_failure": "offline_fallback_and_high_risk_ticket_verified"
+      },
+      {
+        "configuration": "synthetic .env",
+        "status": "passed",
+        "browser_status": "passed",
+        "layout": {
+          "desktop": {
+            "viewport": 1440,
+            "scroll": 1440,
+            "overflow": []
+          },
+          "mobile": {
+            "viewport": 390,
+            "scroll": 390,
+            "overflow": []
+          }
+        },
+        "read_only_volume": "verified_read_only_mount_and_not_ready",
+        "model_failure": "offline_fallback_and_high_risk_ticket_verified"
+      }
+    ],
+    "api_checks": 24,
+    "browser_checks": 40,
+    "screenshots": [
+      {
+        "file": "desktop-dashboard.png",
+        "width": 1440,
+        "height": 2958
+      },
+      {
+        "file": "desktop-employee-escalation.png",
+        "width": 1440,
+        "height": 2490
+      },
+      {
+        "file": "desktop-human-response.png",
+        "width": 1440,
+        "height": 1912
+      },
+      {
+        "file": "mobile-dashboard.png",
+        "width": 390,
+        "height": 5661
+      },
+      {
+        "file": "mobile-employee-escalation.png",
+        "width": 390,
+        "height": 5054
+      },
+      {
+        "file": "mobile-human-response.png",
+        "width": 390,
+        "height": 4092
+      },
+      {
+        "file": "desktop-dashboard.png",
+        "width": 1440,
+        "height": 2927
+      },
+      {
+        "file": "desktop-employee-escalation.png",
+        "width": 1440,
+        "height": 2490
+      },
+      {
+        "file": "desktop-human-response.png",
+        "width": 1440,
+        "height": 1912
+      },
+      {
+        "file": "mobile-dashboard.png",
+        "width": 390,
+        "height": 5661
+      },
+      {
+        "file": "mobile-employee-escalation.png",
+        "width": 390,
+        "height": 5054
+      },
+      {
+        "file": "mobile-human-response.png",
+        "width": 390,
+        "height": 4092
+      }
+    ]
+  },
+  "scope_decision": {
+    "live_api": "retain integration interfaces; do not connect external APIs per user",
+    "formal_environment_and_independent_review": "unavailable; complete executable acceptance first per user"
+  },
+  "failure_preserved": {
+    "run_id": 38500704541,
+    "reason": "390px chat horizontal overflow",
+    "fixed_in": "a194860c947fc31bc1ad12bf2c25549f231f03d6",
+    "successful_run_id": 38501132160
+  },
+  "runtime": {
+    "status": "release_packaged",
+    "artifact_sha256": "57c96578b23fc1d29eb6beac675f95380d2a98f8e2d04d4436db3f465dfabf00",
+    "source_sha256": "bb4b6a8649f8c27a9bef881fb825eca169eefd5eb9e7b0ba314da06a4fc421e4",
+    "file_count": 119
+  },
+  "criteria": [
+    {
+      "id": 1,
+      "status": "passed_offline"
+    },
+    {
+      "id": 2,
+      "status": "passed_offline"
+    },
+    {
+      "id": 3,
+      "status": "core_passed_extended_quality_failed"
+    },
+    {
+      "id": 4,
+      "status": "offline_passed_semantic_integration_deferred"
+    },
+    {
+      "id": 5,
+      "status": "citation_ui_passed_answer_review_deferred"
+    },
+    {
+      "id": 6,
+      "status": "passed_actual_container_and_browser"
+    },
+    {
+      "id": 7,
+      "status": "core_and_regression_passed_independent_review_deferred"
+    },
+    {
+      "id": 8,
+      "status": "passed_with_fault_recovery"
+    },
+    {
+      "id": 9,
+      "status": "passed_actual_browser"
+    },
+    {
+      "id": 10,
+      "status": "passed_offline_core_browser_and_selected_faults"
+    },
+    {
+      "id": 11,
+      "status": "documents_provided"
+    },
+    {
+      "id": 12,
+      "status": "dataset_assets_verified_independent_review_deferred"
+    },
+    {
+      "id": 13,
+      "status": "engineering_passed"
+    }
+  ],
+  "not_covered": [
+    "real host disk exhaustion",
+    "public frontend TLS and formal receiver supervision",
+    "live model generation and semantic embedding quality",
+    "new independent holdout and human semantic answer review",
+    "formal image rollback and cross-host recovery"
+  ]
+}

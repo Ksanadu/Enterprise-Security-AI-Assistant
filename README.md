@@ -1,5 +1,7 @@
 # Enterprise Security AI Assistant
 
+> 2026-10-14 [可执行验收已完成](docs/FINAL_ACCEPTANCE.md)：后端 1813/前端 81 通过，实际 Docker 两配置 24 项 API/故障与 40 项浏览器检查通过；窄屏溢出已修复。扩展质量意图仍未达 95%，API 接入/正式部署/独立审阅按用户要求后续处理，未作完整签收。
+
 > 2026-10-13 当前审查与技术状态见 [项目技术报告](docs/TECHNICAL_REPORT.md)：已合并主分支，GitHub 工程门禁及 Docker 核心验收通过；真实模型、独立质量、容器浏览器与正式运维尚未完整签收。
 
 > 2026-10-12：项目正在按 [分阶段完善方案](docs/IMPROVEMENT_PLAN.md) 推进。

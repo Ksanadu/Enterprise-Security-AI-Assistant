@@ -1,5 +1,9 @@
 # 容器验收执行说明
 
+2026-10-14 最新实际 [容器运行 38501132160](https://github.com/Ksanadu/Enterprise-Security-AI-Assistant/actions/runs/38501132160) 已通过，源码 `a194860c947fc31bc1ad12bf2c25549f231f03d6`，制品 `11866600079`。两配置共24项API/故障、40项Chromium桌面/窄屏检查和12张截图。实际只读卷不能误报就绪，恢复可写后正常；模拟不可达模型保持离线降级和工单。首次窄屏溢出失败已保存并修复，结果见 [本轮验收](FINAL_ACCEPTANCE.md)。真实供应商、正式TLS/渠道及真实磁盘耗尽仍不在已通过范围。
+
+完整浏览器入口为 `scripts/container-acceptance.py --browser`，需要 Playwright/Chromium，GitHub 工作流已安装并使用该入口。无 `--browser` 的运行只检查核心 API，不能作为浏览器证据。下面保留 2026-10-13 的原验收记录与操作说明；历史“浏览器待验收”以本轮结果更新。
+
 最新最终 PR 源提交 `a7d4eee6855e2c4ceef7440f9e9dd98644c98f85` 的同套验收也已通过：[运行 38298909044](https://github.com/Ksanadu/enterprise-security-ai-assistant/actions/runs/38298909044)，job `114976707995`，制品 `11769446894`。PR #1 已合并；下面首次成功及失败记录作为过程证据保留。
 
 2026-10-13：GitHub Ubuntu runner 已实际通过 Mock + TF-IDF 容器核心验收，Docker Engine28.0.4。无 `.env` 与模拟 `.env` 两阶段均通过，记录：[成功运行](https://github.com/Ksanadu/enterprise-security-ai-assistant/actions/runs/38297173963)，对应源提交 `f7c4b1c49f6f9fb299e5f7ec62dad0441cde3219`。本机仍没有可用 Docker Engine，WSL 尚未初始化；容器浏览器和真实模型组合仍待执行。
